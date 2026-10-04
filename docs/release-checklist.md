@@ -1,141 +1,140 @@
-# Antigravity Priority 发布审阅与版本迭代检查规范 (Release & Audit Checklist)
+# Antigravity Priority Release & Audit Checklist
 
-本文档定义了 `antigravity-priority` 插件在每次版本迭代、代码提交与正式发布前的**标准化审阅流程与变更检查矩阵**。每次完成功能开发或缺陷修复后，在提交代码与发布 Release 前，**必须严格依照本清单逐项自检**，确保所有关联文件与元数据变更到位。
-
----
-
-## 目录
-1. [版本号同步一致性矩阵](#1-版本号同步一致性矩阵)
-2. [文档与双语同步审阅清单](#2-文档与双语同步审阅清单)
-3. [CPA 宿主与插件架构契约审阅](#3-cpa-宿主与插件架构契约审阅)
-4. [代码质量与测试验证矩阵](#4-代码质量与测试验证矩阵)
-5. [标准化发布工作流步骤](#5-标准化发布工作流步骤)
+This document defines the **standard review flow and change-check matrix** for every version iteration, code commit, and formal release of the `antigravity-priority` plugin. After finishing a feature or bug fix, and before committing code or publishing a Release, **go through this checklist item by item** so every related file and piece of metadata is updated.
 
 ---
 
-## 1. 版本号同步一致性矩阵
+## Contents
+1. [Version Consistency Matrix](#1-version-consistency-matrix)
+2. [Documentation Review Checklist](#2-documentation-review-checklist)
+3. [CPA Host and Plugin Architecture Contracts](#3-cpa-host-and-plugin-architecture-contracts)
+4. [Code Quality and Test Matrix](#4-code-quality-and-test-matrix)
+5. [Standard Release Workflow](#5-standard-release-workflow)
 
-当进行版本升级（如 `v1.0.1` $\to$ `v1.1.0`）时，**必须确保以下 4 个位置的版本号完全一致**：
+---
 
-| 检查项 | 目标文件 | 关键位置 / 字段 | 审阅标准 |
+## 1. Version Consistency Matrix
+
+When bumping the version (such as `v1.0.1` $\to$ `v1.1.0`), **the version in these 4 places must match exactly**:
+
+| Check | Target file | Key location / field | Rule |
 | :--- | :--- | :--- | :--- |
-| **① 插件注册表** | `registry.json` | `plugins[0].version` | 必须为纯三段式版本号，如 `"1.1.0"`（无 `v` 前缀） |
-| **② 运行时元数据** | `internal/runtime/runtime.go` | `buildMetadata().Version` | 必须与 `registry.json` 完全一致，如 `"1.1.0"` |
-| **③ 嵌入式 Web 仪表盘** | `internal/management/feature_shell_assets.go` | `<span class="version-badge">v1.1.0</span>` | 必须带有 `v` 前缀，如 `v1.1.0` |
-| **④ 专属 Release Note** | `.github/release-notes/vX.Y.Z.md` | 文件名与一级标题 `# antigravity-priority vX.Y.Z` | 文件名必须为 `vX.Y.Z.md`，内容双语齐备 |
+| **1. Plugin registry** | `registry.json` | `plugins[0].version` | Plain three-part version, such as `"1.1.0"` (no `v` prefix) |
+| **2. Runtime metadata** | `internal/runtime/runtime.go` | `buildMetadata().Version` | Must match `registry.json` exactly, such as `"1.1.0"` |
+| **3. Embedded web dashboard** | `internal/management/feature_shell_assets.go` | `<span class="version-badge">v1.1.0</span>` | Must carry the `v` prefix, such as `v1.1.0` |
+| **4. Release note** | `.github/release-notes/vX.Y.Z.md` | File name and top-level heading `# antigravity-priority vX.Y.Z` | File name must be `vX.Y.Z.md`; content is English-only |
 
 ---
 
-## 2. 文档与双语同步审阅清单
+## 2. Documentation Review Checklist
 
-用户面向的公开文档应保持专业清晰、**聚焦核心功能价值**，遵循以下规范：
+Public, user-facing docs should stay clear and professional and **focus on core feature value**. In this fork, the README, release notes, and UI are English-only, with no Chinese text. Follow these rules:
 
-1. **核心功能聚焦原则**：
-   - 概览仅保留高阶核心能力（如 Antigravity 双窗口调度、Dynamic Boost 提权、Weekly Urgency 轮转、自适应学习率、自愈式软降级、UI 动态配置中心、双主题仪表盘）；
-   - **严禁过度展开技术细节**（无需单独罗列如“复用 CPA 宿主链路”、“新鲜证据门禁”、“两阶段纯内存计算”等开发层面的细节优化）。
-2. **纯净化原则（无内部研发代号）**：
-   - **严禁在 `README.md`、`README.en.md` 和 Release Notes 中暴露 `(REQ-xx)` 内部研发标签**。
+1. **Focus on core features**:
+   - The overview lists only high-level core capabilities (such as Antigravity dual-window scheduling, Dynamic Boost, Weekly Urgency rotation, adaptive learning rate, self-healing soft depletion, the UI config center, and the dual-theme dashboard).
+   - **Do not expand on technical details** (no separate bullets for development-level optimizations such as "reuses the CPA host path", "Fresh Evidence gate", or "two-phase in-memory computation").
+2. **No internal codenames**:
+   - **Never expose internal `(REQ-xx)` tags in `README.md` or release notes**.
 
-| 文档 | 审阅重点 | 检查要点 |
+| Document | Review focus | Checks |
 | :--- | :--- | :--- |
-| **`README.md`** (中文) | 功能概览、极简配置、管理 API | - 聚焦核心功能，无细碎实现堆砌；<br>- **严禁带有 `(REQ-xx)` 内部标签**；<br>- 配置说明准确体现“极简 YAML + Web 配置中心”模式；<br>- 接口列表与路由变更保持同步。 |
-| **`README.en.md`** (英文) | 英文对照完整性 | - 中英文段落结构 1:1 对齐；<br>- 英文表达地道准确；<br>- **严禁带有 `(REQ-xx)` 内部标签**。 |
-| **`.github/release-notes/vX.Y.Z.md`** | 双语 Release Note | - 包含 `### 中文` 与 `### English` 两大章节；<br>- 重点分模块梳理核心功能升级、性能优化、体验改善；<br>- **严禁带有 `(REQ-xx)` 内部标签**。 |
-| **`docs/requirements/`** | 需求与技术规格路线图 | - 状态从 `待实施 (Ready)` 更新为 `已完成 (Completed)`；<br>- 涵盖需求规格、领域模型与架构设计（内部研发文档可保留 REQ 编号）。 |
+| **`README.md`** | Feature overview, minimal config, management API | - Focused on core features, no pile of small implementation details;<br>- English-only, no Chinese text;<br>- **No internal `(REQ-xx)` tags**;<br>- Config docs reflect the "minimal YAML + web config center" model;<br>- API list stays in sync with route changes. |
+| **`.github/release-notes/vX.Y.Z.md`** | English release note | - English-only, a single English body with no Chinese section (follow `TEMPLATE.md`);<br>- Organize core feature upgrades, performance improvements, and UX improvements by module;<br>- **No internal `(REQ-xx)` tags**. |
+| **`docs/requirements/`** | Requirements and technical spec roadmap | - Update status from `Ready` to `Completed`;<br>- Covers requirement specs, domain model, and architecture design (internal docs may keep REQ numbers). |
 
 ---
 
-## 3. CPA 宿主与插件架构契约审阅
+## 3. CPA Host and Plugin Architecture Contracts
 
-| 审阅维度 | 架构原理与检查标准 | 达标标准 |
+| Dimension | Principle and check | Pass criteria |
 | :--- | :--- | :--- |
-| **宿主配置极简** | CPA 宿主 `config.yaml` 仅作为基础加载开关，不承载日常业务参数。 | 用户 YAML 仅需 `enabled: true`，物理路径 `state_cache_path` 默认缺省为 `data/antigravity-priority-cache.json`。 |
-| **元数据干净度 (`buildMetadata`)** | CPA 官方管理端根据 `Metadata.ConfigFields` 渲染抽屉表单，用户在抽屉保存会写回 `config.yaml` 导致 CPA 强制重载。为了让配置中心独占管理业务参数，**`ConfigFields` 保持为 `nil`**（方案 A 极简无扰）。 | `buildMetadata()` 中不包含 `ConfigFields`，避免产生表单冲突与意外重载。 |
-| **分层配置底座 (`config.Default()`)** | `config.Default()` 是系统冷启动、无缓存文件时的基准兜底以及 UI 恢复默认值的**单一真实来源 (Single Source of Truth)**。 | `Default()` 返回的默认结构（15m, gemini, 6, 1, 999, 100）必须与推荐配置完全一致。 |
-| **动态配置持久化与热重载** | 业务与调度参数保存至 `data/antigravity-priority-cache.json` 的 `app_config` 节点，修改后立即热重设 Ticker Worker。 | 动态配置持久化存盘 (`SaveAtomic`)，启动与 Reconfigure 时自动合并持久化配置，0 秒免重启热生效。 |
+| **Minimal host config** | The CPA host `config.yaml` is only the basic load switch and carries no day-to-day business parameters. | User YAML needs only `enabled: true`; the `state_cache_path` file path defaults to `data/antigravity-priority-cache.json`. |
+| **Clean metadata (`buildMetadata`)** | The official CPA management UI renders a drawer form from `Metadata.ConfigFields`, and saving that drawer writes back to `config.yaml`, which forces CPA to reload. So that the config center alone manages business parameters, **`ConfigFields` stays `nil`** (option A, minimal and non-intrusive). | `buildMetadata()` contains no `ConfigFields`, avoiding form conflicts and unexpected reloads. |
+| **Layered config baseline (`config.Default()`)** | `config.Default()` is the **single source of truth** for the cold-start baseline when no cache file exists and for the UI's restore-defaults action. | The defaults returned by `Default()` (15m, gemini, 6, 1, 999, 100) must match the recommended config exactly. |
+| **Dynamic config persistence and hot reload** | Business and scheduling parameters are saved to the `app_config` node of `data/antigravity-priority-cache.json`; a change immediately resets the ticker worker. | Dynamic config is persisted (`SaveAtomic`), merged automatically at startup and on Reconfigure, and takes effect instantly without a restart. |
 
 ---
 
-## 4. 代码质量与测试验证矩阵
+## 4. Code Quality and Test Matrix
 
-每完成一项功能或缺陷修复，必须先在本地执行 lint，再执行单元测试；准备提交或发布前，必须再次执行同一套 lint，并完成完整质量矩阵。所有检查都必须 **100% 通过且零告警**。
+After each feature or bug fix, run lint locally first, then the unit tests. Before committing or releasing, run the same lint again and complete the full quality matrix. Every check must pass **100% with zero warnings**.
 
-### 4.1 功能完成后的本地验证顺序
+### 4.1 Local verification after finishing a feature
 
-本地完成代码后必须严格按以下顺序执行，不能用 `go vet` 替代 `golangci-lint`：
+After writing the code, run these in this order. `go vet` does not replace `golangci-lint`:
 
 ```bash
-# 1. Lint（必须使用与 release workflow 一致的 golangci-lint v2.12.2）
+# 1. Lint (must use golangci-lint v2.12.2, same as the release workflow)
 golangci-lint run --timeout=5m
 
-# 2. 单元测试
+# 2. Unit tests
 go test ./...
 ```
 
-### 4.2 提交与发布前完整验证
+### 4.2 Full verification before commit and release
 
-准备提交、创建版本标签或发布 Release 前，必须重新执行 lint，然后执行以下完整验证命令：
+Before committing, creating a version tag, or publishing a Release, run lint again, then the full verification commands below:
 
 ```bash
-# 1. Lint（必须使用与 release workflow 一致的 golangci-lint v2.12.2）
+# 1. Lint (must use golangci-lint v2.12.2, same as the release workflow)
 golangci-lint run --timeout=5m
 
-# 2. 编译自检（确保所有包与子模块无语法/类型错误）
+# 2. Build check (all packages and submodules free of syntax/type errors)
 go build ./...
 
-# 3. 基础静态代码分析
+# 3. Basic static analysis
 go vet ./...
 
-# 4. 完整单元测试（包括文档完整性、注册表合规性、模板合规性测试）
+# 4. Full unit tests (including documentation, registry compliance, and template compliance tests)
 go test -v ./...
 
-# 5. 数据竞争检测（确保并发调度、探针协程池与缓存读写零 race condition）
+# 5. Race detection (zero race conditions in concurrent scheduling, the probe worker pool, and cache reads/writes)
 go test -race ./...
 ```
 
-### 关键测试项说明
-- **`TestRegistryJSON_SchemaValidation`**：校验 `registry.json` 符合 CPA 插件商店标准。
-- **`TestDocumentation_BilingualCompleteness`**：校验 `README.md` 与 `README.en.md` 存在且双语完整。
-- **`TestStatusHTML_NoRemoteURLs`**：确保 `StatusHTML` 零外部 CDN、零远程字体/脚本，100% 离线自包含，符合严格 CSP。
-- **`TestStatusHTML_CSSTokenCompleteness`**：确保明亮/暗色/羊皮纸 3 种主题变量完整闭环。
+### Key tests
+- **`TestRegistryJSON_SchemaValidation`**: Validates that `registry.json` meets the CPA plugin store standard.
+- **`TestDocumentation_EnglishReadmeCompleteness`**: Checks that `README.md` exists, is English-only, and covers the core sections and CPA paths.
+- **`TestStatusHTML_NoRemoteURLs`**: Ensures `StatusHTML` has no external CDN and no remote fonts/scripts, is fully self-contained offline, and meets a strict CSP.
+- **`TestStatusHTML_CSSTokenCompleteness`**: Ensures the light (white) and dark theme variable sets are complete.
 
 ---
 
-## 5. 标准化发布工作流步骤
+## 5. Standard Release Workflow
 
 ```text
-[功能开发 / 需求迭代]
+[Feature development / requirement iteration]
          │
          ▼
-[1. 关联代码与文档更新]
-   ├─ 更新业务代码与单元测试 (TDD)
-   ├─ 检查版本号一致性 (registry.json, runtime.go, feature_shell_assets.go)
-   ├─ 编写 .github/release-notes/vX.Y.Z.md (双语、无 REQ 标签、核心功能)
-   └─ 同步更新 README.md 与 README.en.md (高度凝练、无技术细节堆砌)
+[1. Update related code and docs]
+   ├─ Update business code and unit tests (TDD)
+   ├─ Check version consistency (registry.json, runtime.go, feature_shell_assets.go)
+   ├─ Write .github/release-notes/vX.Y.Z.md (English-only, no REQ tags, core features)
+   └─ Update README.md (concise, no pile of technical details)
          │
          ▼
-[2. 功能完成后的本地验证]
+[2. Local verification after finishing the feature]
    ├─ golangci-lint run --timeout=5m
    └─ go test ./...
          │
          ▼
-[3. 执行提交与发布前完整质量自检]
-   ├─ 再次执行 golangci-lint run --timeout=5m
+[3. Full quality check before commit and release]
+   ├─ golangci-lint run --timeout=5m again
    ├─ go build ./...
    ├─ go vet ./...
    ├─ go test -v ./...
    └─ go test -race ./...
          │
          ▼
-[4. 用户确认 (安全底线)]
+[4. User confirmation (safety baseline)]
    └─ "Never commit without explicit user confirmation during the conversation"
          │
          ▼
-[5. Git Commit 提交与打标]
-   ├─ Commit 消息遵循 Conventional Commits 规范 (如 chore: bump version to v1.1.0)
-   └─ 创建 Git Tag: git tag vX.Y.Z
+[5. Git commit and tag]
+   ├─ Commit messages follow Conventional Commits (such as chore: bump version to v1.1.0)
+   └─ Create the Git tag: git tag vX.Y.Z
          │
          ▼
-[5. GitHub Release 自动化发布]
-   └─ CI 自动交叉编译生成各平台动态库产物 (.so / .dylib / .dll)
+[6. Automated GitHub Release]
+   └─ CI cross-compiles the dynamic library artifacts for each platform (.so / .dylib / .dll)
 ```

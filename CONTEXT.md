@@ -15,7 +15,7 @@ The 7-day weekly total quota pool allocated by Antigravity for an account.
 _Avoid_: Monthly quota, account balance, total tokens
 
 **Model Group**:
-The upstream independent quota计量 unit in Antigravity, either `gemini` (Gemini models) or `claude_gpt` (Claude and GPT models).
+The upstream independent quota metering unit in Antigravity, either `gemini` (Gemini models) or `claude_gpt` (Claude and GPT models).
 _Avoid_: Provider, engine, model name
 
 **Control Model Group**:

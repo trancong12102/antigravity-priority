@@ -1,62 +1,62 @@
-# 架构深化方案设计：第二轮 (Architecture Deepening Proposals — Round 2)
+# Architecture Deepening Proposals: Round 2
 
-本文档记录 `antigravity-priority` 第二轮架构审阅识别出的 **module 深化机遇 (Deepening Opportunities)**。
+This document records the **module deepening opportunities** found in the second architecture review of `antigravity-priority`.
 
-本轮审阅以近期高频变更区域为范围，重点检查：
+This round focuses on areas with frequent recent changes, mainly:
 
-- `internal/runtime`、`internal/state`、`internal/priority` 与 `internal/apply` 之间的调度执行链；
-- `internal/management` 嵌入式管理页的最新资产拆分；
-- Fresh Evidence、双 Model Group 投影、Host transition 与执行记录等跨 module 语义；
-- 当前 interface 是否形成稳定测试表面，以及复杂度是否在 seam 两侧泄漏。
+- the scheduling and execution chain across `internal/runtime`, `internal/state`, `internal/priority` and `internal/apply`;
+- the recent asset split of the embedded management page in `internal/management`;
+- cross-module semantics such as Fresh Evidence, the dual Model Group projection, Host transitions and execution records;
+- whether the current interfaces form a stable test surface, and whether complexity leaks across seams.
 
-审阅使用 `module`、`interface`、`implementation`、`depth`、`deep`、`shallow`、`seam`、`adapter`、`leverage` 与 `locality` 作为统一架构词汇，并对候选执行 **deletion test**。
+The review uses `module`, `interface`, `implementation`, `depth`, `deep`, `shallow`, `seam`, `adapter`, `leverage` and `locality` as its shared architecture vocabulary, and applies a **deletion test** to each candidate.
 
-> **状态说明**：各项状态以对应章节为准。完成设计审问的提案会记录已确认范围，并由独立规格承接实施细节。
-
----
-
-## 与第一轮提案的关系
-
-第一轮提案记录在 [`architecture-deepening-proposals.md`](./architecture-deepening-proposals.md)，其中以下四项已经完成：
-
-1. 将探测失败策略吸收进 Priority Planner；
-2. 统一静态与动态配置至深度配置 module；
-3. 拆分物理文档修改与 Host RPC adapter；
-4. 将状态缓存深化为高语义状态引擎。
-
-本轮候选不重新提出上述工作。部分问题与第一轮落地结果相邻，但关注的是落地后仍然存在的 interface 复杂度、语义泄漏和调用者编排知识。
+> **Status note**: the status in each section is authoritative. Proposals that have finished design interrogation record their confirmed scope, and implementation details are carried by separate specs.
 
 ---
 
-## 目录
+## Relationship to Round 1
 
-1. [统一 Host transition 与执行记录](#1-统一-host-transition-与执行记录)
-2. [收拢 Fresh Evidence 权威归属](#2-收拢-fresh-evidence-权威归属)
-3. [深化双 Model Group 规划投影](#3-深化双-model-group-规划投影)
-4. [按用户功能收拢管理页资产](#4-按用户功能收拢管理页资产)
-5. [推荐顺序与组合关系](#5-推荐顺序与组合关系)
+Round 1 is recorded in [`architecture-deepening-proposals.md`](./architecture-deepening-proposals.md). These four items are complete:
+
+1. Absorb probe failure policy into the Priority Planner.
+2. Unify static and dynamic configuration into a deep config module.
+3. Split physical document patching from the Host RPC adapter.
+4. Deepen the state cache into a high-level state engine.
+
+This round does not re-propose that work. Some issues sit next to Round 1 results, but they concern interface complexity, semantic leaks and caller orchestration knowledge that remain after those changes landed.
 
 ---
 
-## 1. 统一 Host transition 与执行记录
+## Contents
 
-- **状态**：`已完成 (Completed)`
-- **落地提交**：`1fe981c feat(apply): unify atomic host transition execution`
-- **推荐强度**：`Strong`
-- **依赖类别**：`local-substitutable`
-- **建议优先级**：`P1 / Top recommendation`
-- **涉及文件**：
+1. [Unify Host transitions and execution records](#1-unify-host-transitions-and-execution-records)
+2. [Consolidate ownership of Fresh Evidence](#2-consolidate-ownership-of-fresh-evidence)
+3. [Deepen the dual Model Group planning projection](#3-deepen-the-dual-model-group-planning-projection)
+4. [Organize management page assets by user feature](#4-organize-management-page-assets-by-user-feature)
+5. [Recommended order and how the proposals combine](#5-recommended-order-and-how-the-proposals-combine)
+
+---
+
+## 1. Unify Host transitions and execution records
+
+- **Status**: `Completed`
+- **Landed in**: `1fe981c feat(apply): unify atomic host transition execution`
+- **Recommendation**: `Strong`
+- **Dependency category**: `local-substitutable`
+- **Suggested priority**: `P1 / Top recommendation`
+- **Files involved**:
   - `internal/apply/apply.go`
   - `internal/apply/audit.go`
   - `internal/runtime/production_runner.go`
   - `internal/runtime/runtime.go`
   - `internal/state/store.go`
 
-### 目前的痛点
+### Current pain points
 
-正常 Apply、429 Reactive Cooldown 与 ResetAllPriorities 是三种 Host 状态变更，但目前使用三套不完全一致的执行路径。
+Normal Apply, 429 Reactive Cooldown and ResetAllPriorities are three kinds of Host state change, but they use three execution paths that are not fully consistent.
 
-正常 Apply 的主要调用链为：
+The main call chain for normal Apply is:
 
 ```text
 priority.Plan
@@ -68,17 +68,17 @@ priority.Plan
   → Store.SaveAtomic
 ```
 
-429 Reactive Cooldown 由 `Runtime.triggerCooldown` 手工构造 `priority.Plan` 和 `priority.Change`，调用 `apply.Apply` 后再自行生成历史记录并持久化。
+429 Reactive Cooldown has `Runtime.triggerCooldown` build a `priority.Plan` and `priority.Change` by hand, call `apply.Apply`, and then generate and persist its own history record.
 
-ResetAllPriorities 则绕开 `apply.Apply`，直接循环调用 `client.ResetPriority`，随后自行构造 `apply.Result`、快照、历史记录和持久化数据。
+ResetAllPriorities bypasses `apply.Apply` entirely: it loops over `client.ResetPriority` directly, then builds its own `apply.Result`, snapshot, history record and persisted data.
 
-这些分叉导致 Host transition 的顺序、错误、结果、脱敏和持久化语义缺乏单一权威。
+Because of these forks, no single authority defines ordering, errors, results, redaction or persistence semantics for a Host transition.
 
-### 精确证据
+### Concrete evidence
 
-#### 1.1 `Auditor` seam 的生产 adapter 是空 implementation
+#### 1.1 The production adapter for the `Auditor` seam is an empty implementation
 
-`apply.Request` 强制要求 `Auditor`：
+`apply.Request` requires an `Auditor`:
 
 ```go
 type Auditor interface {
@@ -87,7 +87,7 @@ type Auditor interface {
 }
 ```
 
-`apply.Apply` 在 Host 写入前调用 `SaveSnapshot` 与 `RecordEvent`。但是 Runtime 的生产 implementation 只返回 `ctx.Err()`，没有使用或保存传入参数：
+`apply.Apply` calls `SaveSnapshot` and `RecordEvent` before writing to the Host. But the Runtime's production implementation only returns `ctx.Err()` and neither uses nor saves its arguments:
 
 ```go
 func (r *Runtime) SaveSnapshot(ctx context.Context, snapshot apply.PlanSnapshot) error {
@@ -99,13 +99,13 @@ func (r *Runtime) RecordEvent(ctx context.Context, event apply.AuditEvent) error
 }
 ```
 
-真实记录发生在 Host 写入后，并分散在 Runtime 各执行分支中。因此 `Auditor` interface 表达的写前保证与生产行为不一致。
+Real recording happens after the Host write, scattered across the Runtime's execution branches. So the write-ahead guarantee implied by the `Auditor` interface does not match production behavior.
 
-目前只有一个生产 adapter，且该 adapter 没有实际 implementation。按照“一种 adapter 代表 hypothetical seam，两种 adapter 才证明真实变化”的原则，该 seam 尚未证明自身价值。
+There is only one production adapter, and it has no real implementation. Under the principle "one adapter means a hypothetical seam; two adapters prove real variation", this seam has not proven its value.
 
-#### 1.2 执行记录持久化在多个分支重复
+#### 1.2 Execution record persistence is duplicated across branches
 
-以下步骤在 Probe、零变更 Apply、普通 Apply、Reset 与 429 Cooldown 中以不同形式重复：
+The following steps are repeated in different forms across Probe, zero-change Apply, normal Apply, Reset and 429 Cooldown:
 
 ```text
 snapshotRunEntry
@@ -115,150 +115,150 @@ snapshotRunEntry
 → store.SaveAtomic
 ```
 
-部分路径检查 `SaveAtomic` 返回值，部分路径使用 `_ = store.SaveAtomic(ctx)` 忽略错误。执行记录是否可靠落盘取决于具体触发路径。
+Some paths check the return value of `SaveAtomic`; others ignore the error with `_ = store.SaveAtomic(ctx)`. Whether an execution record reliably reaches disk depends on which path triggered it.
 
-#### 1.3 部分 Host transition 缺乏明确结果语义
+#### 1.3 Some Host transitions lack clear result semantics
 
-`applyChange` 可能按以下顺序执行：
+`applyChange` can execute in this order:
 
 ```text
-PatchPriority 成功
-→ PatchDisabled 失败
+PatchPriority succeeds
+→ PatchDisabled fails
 ```
 
-此时 Host 已经发生部分变更，但最终结果主要标记为 `failed`。当前结果没有明确表达哪些字段已经成功写入，以及 Host 可能处于何种部分状态。
+The Host has now been partially changed, but the final result is mostly marked `failed`. The current result does not state which fields were written successfully or what partial state the Host may be in.
 
-#### 1.4 Reset 的尝试与失败统计被压缩
+#### 1.4 Reset collapses attempts and failures
 
-`ResetAllPriorities` 只在 `ResetPriority` 成功时增加 `resetCount`，最终却同时使用该值作为：
+`ResetAllPriorities` only increments `resetCount` when `ResetPriority` succeeds, yet uses that value for both:
 
 ```go
 Attempted: resetCount,
 Succeeded: resetCount,
 ```
 
-如果尝试 10 个凭证而成功 7 个，记录可能只显示尝试 7 个、成功 7 个，失败的 3 次 transition 没有进入可信结果模型。
+If 10 credentials are attempted and 7 succeed, the record may show 7 attempted and 7 succeeded; the 3 failed transitions never enter a trustworthy result model.
 
-### 为什么需要深化
+### Why deepening is needed
 
-Host 状态变更是 Apply Layer 的核心所有权。调用者和测试需要通过一个稳定 interface 回答：
+Host state changes are the core ownership of the Apply Layer. Callers and tests need one stable interface to answer:
 
-- 计划改变什么；
-- 实际尝试了什么；
-- 哪些字段成功写入；
-- 哪些字段失败；
-- 是否出现部分成功；
-- 脱敏执行记录是否成功持久化；
-- Host 当前可能处于什么状态。
+- what the plan intends to change;
+- what was actually attempted;
+- which fields were written successfully;
+- which fields failed;
+- whether a partial success occurred;
+- whether the redacted execution record was persisted;
+- what state the Host may currently be in.
 
-当前这些知识分散在 `apply`、`runtime` 和 `state`，导致一次 transition 的完整行为无法通过单一 seam 验证。
+Today this knowledge is spread across `apply`, `runtime` and `state`, so the full behavior of one transition cannot be verified through a single seam.
 
 ### Deletion test
 
-如果直接删除当前 `Auditor` interface 和 Runtime 的空 implementation，生产行为几乎不会改变，说明该 module 是 shallow 的。
+Deleting the current `Auditor` interface and the Runtime's empty implementation would barely change production behavior, which shows the module is shallow.
 
-相反，如果形成一个真正负责 Host transition 与执行记录生命周期的 deep module，再删除它，门禁、写入顺序、部分成功、结果统计、脱敏和持久化复杂度会重新散落到普通 Apply、Reset 与 429 Cooldown 三个调用者中。这表明该方向能够产生真实 depth 与 leverage。
+Conversely, if a deep module truly owned the Host transition and execution record lifecycle, deleting it would scatter gating, write ordering, partial success, result counting, redaction and persistence complexity back into three callers: normal Apply, Reset and 429 Cooldown. That shows this direction yields real depth and leverage.
 
-### 深化方向
+### Deepening direction
 
-深化现有 Apply module，使一次 Host transition 的以下行为保持 locality：
+Deepen the existing Apply module so that the following behavior of one Host transition has locality:
 
 ```text
-验证写入门禁
-→ 捕获写前状态
-→ 执行 Host transition
-→ 表达完整成功、部分成功、失败或跳过
-→ 生成脱敏执行记录
-→ 持久化执行结果
+Validate write gate
+→ Capture pre-write state
+→ Execute Host transition
+→ Express full success, partial success, failure or skip
+→ Generate redacted execution record
+→ Persist execution result
 ```
 
-普通 Apply、Reset 与 429 Reactive Cooldown 应复用同一 transition 语义。Runtime 仍然拥有 ManualApply、AutoApply、Reset 和 Cooldown 等用例执行权；本提案不把应用用例所有权移动到 Apply module。
+Normal Apply, Reset and 429 Reactive Cooldown should reuse the same transition semantics. The Runtime still owns execution of the ManualApply, AutoApply, Reset and Cooldown use cases; this proposal does not move use-case ownership into the Apply module.
 
-具体 interface 必须在后续设计阶段确定，当前不预设新的 port 或 adapter。
+The concrete interface must be decided in a later design phase; no new port or adapter is assumed now.
 
-### 优化目的
+### Goals
 
-- 让 Host transition 的事实结果成为唯一权威；
-- 消除名义审计与真实持久化之间的契约差异；
-- 统一三种写入路径的门禁、错误和统计语义；
-- 让执行记录与实际 Host 变化保持一致；
-- 建立能够覆盖部分成功的稳定测试表面。
+- Make the factual outcome of a Host transition the single authority.
+- Remove the contract gap between nominal auditing and actual persistence.
+- Unify gating, error and counting semantics across the three write paths.
+- Keep execution records consistent with actual Host changes.
+- Establish a stable test surface that covers partial success.
 
-### 预期结果
+### Expected results
 
-- `Attempted`、`Succeeded`、`Failed`、`Skipped` 与部分成功统计可信；
-- Reset、429 Cooldown 与普通 Apply 共享一致结果模型；
-- 执行记录持久化错误不再被静默忽略；
-- 测试可直接覆盖“priority 成功、disabled 失败”等 transition；
-- Runtime 中重复的历史记录、序列化与持久化编排明显减少；
-- 诊断页展示的最近写入健康状态能够对应真实 Host transition；
-- Apply Layer 更符合 AGENTS.md 中“写回门禁与全脱敏审计落盘”的所有权规范。
+- `Attempted`, `Succeeded`, `Failed`, `Skipped` and partial-success counts are trustworthy.
+- Reset, 429 Cooldown and normal Apply share one result model.
+- Execution record persistence errors are no longer silently ignored.
+- Tests can directly cover transitions such as "priority succeeded, disabled failed".
+- Duplicated history, serialization and persistence orchestration in the Runtime shrinks noticeably.
+- The recent write health shown on the diagnostics page corresponds to real Host transitions.
+- The Apply Layer better matches the AGENTS.md ownership rule of "write-back gating and fully redacted audit persistence".
 
-### 风险与约束
+### Risks and constraints
 
-- 不得把优先级计算移入 Apply Layer；Planner 仍必须是无副作用纯函数；
-- 必须明确定义部分成功后的重试行为，避免重复写入造成新的状态漂移；
-- 不应为了测试而暴露内部 seam；
-- 如果最终仍只有一种生产 adapter，不应保留没有行为差异的抽象；
-- 必须继续保证所有审计信息完全脱敏。
+- Priority computation must not move into the Apply Layer; the Planner must remain a side-effect-free pure function.
+- Retry behavior after partial success must be defined explicitly, so repeated writes do not cause new state drift.
+- Internal seams should not be exposed just for testing.
+- If there is still only one production adapter in the end, abstractions with no behavioral difference should not be kept.
+- All audit information must remain fully redacted.
 
-### ADR 关系
+### ADR relationship
 
-本提案不与现有 ADR 冲突。设计审问形成的决策已记录为 [`ADR-0005`](../adr/0005-atomic-host-transition-and-truthful-outcomes.md)，并强化：
+This proposal does not conflict with existing ADRs. The decisions from design interrogation are recorded as [`ADR-0005`](../adr/0005-atomic-host-transition-and-truthful-outcomes.md), and they reinforce:
 
-- ADR-0003 中 Soft Depletion 与 Hard Depletion 的实际写入语义；
-- ADR-0004 中 429 Reactive Cooldown 的非破坏性 Host transition；
-- AGENTS.md 中 Apply Layer 对门禁、Host Patch 与脱敏审计的所有权。
+- the actual write semantics of Soft Depletion and Hard Depletion in ADR-0003;
+- the non-destructive Host transition for 429 Reactive Cooldown in ADR-0004;
+- the Apply Layer's ownership of gating, Host Patch and redacted auditing in AGENTS.md.
 
-### 设计审问已确认决策（2026-08-22）
+### Decisions confirmed in design interrogation (2026-08-22)
 
-以下结论已经通过 `/grill-with-docs` 与用户确认，后续设计和实施不得静默改变：
+The following conclusions were confirmed with the user via `/grill-with-docs`; later design and implementation must not change them silently:
 
-1. **同一凭证的目标字段属于一个 Host Transition**：priority 与 disabled 位于同一凭证文件时，通过一次文件替换共同提交，不保留两个独立业务结果；
-2. **结果以 Host 最终状态为准**：请求是否返回错误不能单独决定 transition 是否成功；
-3. **三类操作共享 transition 语义**：普通 Apply、429 Reactive Cooldown 与 Reset Priority 使用一致的成功、失败、验证和执行记录语义；
-4. **credential 之间独立执行**：单个 credential 失败不阻止其他 credential；
-5. **Host 当前状态具有并发权威**：检测到读取后的外部 decision-state 修改时，放弃旧 Plan，不覆盖，由下一轮 Fresh Evidence 和 Planner 重新决策；
-6. **文件替换成功是 commit point**：commit point 前取消可安全返回失败；commit point 后的 context 取消不能否定已经发生的 Host Transition；
-7. **提交后重读验证**：验证目标字段和 JSON 有效性，不要求整个文件字节完全相同；无法确认最终状态时报告 `uncertain`；
-8. **Host outcome 与 Record outcome 分离**：Host 状态事实和执行记录可靠性是两个正交结果；
-9. **并发比较只覆盖决策相关状态**：比较 credential identity、priority 与 disabled；无关字段使用最新 Host 文档并保持不变；
-10. **字段目标使用显式操作语义**：每个目标字段表达 `unchanged`、`set` 或 `unset`，支持三类用例共享 transition implementation；
-11. **不执行同轮自动重试**：失败后直接记录，由后续定时轮次基于新的 Fresh Evidence 补偿；
-12. **429 Cooldown 事实独立持久化**：Host demotion 失败不撤销已经发生的 cooldown；
-13. **Host outcome 使用五个终态**：`no_change`、`committed`、`failed`、`conflict` 与 `uncertain`，具体原因通过 reason 表达；
-14. **整轮统计从 transition 明细推导**：汇总不得由各执行路径手工维护；
-15. **三类用例统一产生 transition intent**：普通 Apply 从 Planner changes 转换；429 使用 `set priority=-1 / unchanged disabled`；Reset 使用 `unset priority / unchanged disabled`。Planner 继续独占调度计算。
+1. **A credential's target fields form one Host Transition**: when priority and disabled live in the same credential file, they are committed together through one file replacement, not kept as two separate business results.
+2. **The result is defined by the Host's final state**: whether a request returned an error does not by itself decide whether the transition succeeded.
+3. **The three operations share transition semantics**: normal Apply, 429 Reactive Cooldown and Reset Priority use consistent success, failure, verification and execution record semantics.
+4. **Credentials execute independently**: one credential's failure does not block the others.
+5. **Current Host state is the concurrency authority**: if an external decision-state change after the read is detected, the old Plan is abandoned rather than overwritten, and the next round of Fresh Evidence and the Planner decide again.
+6. **Successful file replacement is the commit point**: cancellation before the commit point can safely return failure; context cancellation after the commit point cannot negate a Host Transition that already happened.
+7. **Re-read verification after commit**: verify the target fields and JSON validity, without requiring the whole file to be byte-identical; report `uncertain` when the final state cannot be confirmed.
+8. **Host outcome and Record outcome are separate**: Host state facts and execution record reliability are two orthogonal results.
+9. **Concurrency comparison covers only decision-relevant state**: compare credential identity, priority and disabled; unrelated fields take the latest Host document and are left unchanged.
+10. **Field targets use explicit operation semantics**: each target field expresses `unchanged`, `set` or `unset`, so all three use cases can share one transition implementation.
+11. **No same-round automatic retry**: failures are recorded directly, and later scheduled rounds compensate based on new Fresh Evidence.
+12. **429 Cooldown facts are persisted independently**: a failed Host demotion does not undo a cooldown that already happened.
+13. **Host outcome has five terminal states**: `no_change`, `committed`, `failed`, `conflict` and `uncertain`, with the specific cause expressed through a reason.
+14. **Round totals are derived from transition details**: totals must not be maintained by hand in each execution path.
+15. **All three use cases produce a transition intent**: normal Apply converts from Planner changes; 429 uses `set priority=-1 / unchanged disabled`; Reset uses `unset priority / unchanged disabled`. The Planner keeps sole ownership of scheduling computation.
 
-#### 明确拒绝的推测性复杂度
+#### Speculative complexity explicitly rejected
 
-以下设计在本轮被明确排除，除非未来出现可复现故障或新增真实使用场景：
+The following designs were explicitly ruled out this round, unless a reproducible failure or a new real use case appears:
 
-- write-ahead sidecar journal；
-- 精确的进程崩溃恢复与 pending 协调协议；
-- journal schema、fingerprint identity、幂等清理与独立持久化路径；
-- 同轮自动重试、退避或 replay；
-- 为尚未出现的多 writer 场景引入额外 port 或 adapter。
+- a write-ahead sidecar journal;
+- precise process crash recovery and a pending reconciliation protocol;
+- journal schema, fingerprint identity, idempotent cleanup and a separate persistence path;
+- same-round automatic retry, backoff or replay;
+- extra ports or adapters for a multi-writer scenario that does not yet exist.
 
 ---
 
-## 2. 收拢 Fresh Evidence 权威归属
+## 2. Consolidate ownership of Fresh Evidence
 
-- **状态**：`讨论完成 (Accepted)`
-- **推荐强度**：`Strong`
-- **依赖类别**：`in-process`
-- **建议优先级**：`P1`
-- **涉及文件**：
+- **Status**: `Accepted`
+- **Recommendation**: `Strong`
+- **Dependency category**: `in-process`
+- **Suggested priority**: `P1`
+- **Files involved**:
   - `internal/priority/planner.go`
   - `internal/state/store.go`
   - `internal/runtime/production_runner.go`
   - `internal/runtime/runtime.go`
 
-### 目前的痛点
+### Current pain points
 
-`CONTEXT.md` 将 Fresh Evidence 定义为当前调度轮次成功探测得到的、经过验证的配额观察数据。
+`CONTEXT.md` defines Fresh Evidence as validated quota observations obtained by a successful probe in the current scheduling round.
 
-但代码中，证据是否属于 Fresh Evidence 需要由 Store、Runtime 和 Planner 共同推断。`priority.ProbeEvidence` 同时暴露：
+In the code, however, whether evidence counts as Fresh Evidence has to be inferred jointly by the Store, Runtime and Planner. `priority.ProbeEvidence` exposes all of:
 
 ```text
 ObservedAt
@@ -268,13 +268,13 @@ Status
 EvidenceFresh
 ```
 
-成功证据、失败证据、缓存证据、本轮证据和历史预测证据没有通过单一 interface 表达，而是依赖多个字段组合和调用顺序。
+Successful, failed, cached, current-round and historical prediction evidence are not expressed through one interface; they rely on combinations of several fields and on call order.
 
-### 精确证据
+### Concrete evidence
 
-#### 2.1 Planner 对成功与失败证据使用不同的新鲜度条件
+#### 2.1 The Planner uses different freshness conditions for success and failure evidence
 
-Planner 判断成功证据时检查：
+For success evidence the Planner checks:
 
 ```text
 EvidenceFresh == true
@@ -283,157 +283,157 @@ ProbeStatus == Ready
 Status == Ready
 ```
 
-但是 `freshEvidenceByAuthIndex` 也会接纳 `Status == ProbeFailed` 的证据，而没有对失败证据执行同样完整的 current-round 检查。随后 `initialItems` 会将该失败证据标记为 `EvidenceFresh = true` 并生成禁用决策。
+But `freshEvidenceByAuthIndex` also accepts evidence with `Status == ProbeFailed` without applying the same full current-round check to failure evidence. `initialItems` then marks that failure evidence `EvidenceFresh = true` and produces a disable decision.
 
-#### 2.2 Store 把缓存状态转换成看似新鲜的证据
+#### 2.2 The Store turns cached state into evidence that looks fresh
 
-`state.GetCachedEvidence` 从成功缓存构造 `priority.ProbeEvidence` 时，会设置 `FreshnessFresh`、`ProbeStatusReady` 与 `EvidenceFresh = true`。
+When `state.GetCachedEvidence` builds a `priority.ProbeEvidence` from a successful cache entry, it sets `FreshnessFresh`, `ProbeStatusReady` and `EvidenceFresh = true`.
 
-但缓存存在并不自动等于“当前调度轮次的 Fresh Evidence”。缓存是否可用于只读展示、预测或 Host 写回，需要调用者进一步判断。
+But a cache entry existing does not automatically mean "Fresh Evidence for the current scheduling round". Whether the cache may be used for read-only display, prediction or Host write-back is left for callers to decide.
 
-#### 2.3 Runtime 私有过滤函数承担隐藏门禁
+#### 2.3 A private Runtime filter acts as a hidden gate
 
-生产调度通过 `currentRoundEvidence` 检查：
+Production scheduling uses `currentRoundEvidence` to check:
 
 ```go
 item.ObservedAt.Equal(observedAt)
 ```
 
-以筛选本轮证据。该过滤保护了生产 Apply，但它是 Runtime 私有知识，没有体现在 Planner 或 Store 的 interface 中。
+to select current-round evidence. This filter protects production Apply, but it is private Runtime knowledge that is not reflected in the Planner or Store interface.
 
-#### 2.4 不同 Planner 调用者没有统一执行过滤
+#### 2.4 Planner callers do not apply the filter consistently
 
-`runProductionTask` 在实际规划前调用 `currentRoundEvidence`。
+`runProductionTask` calls `currentRoundEvidence` before planning.
 
-`SyncHost` 和 `ResetAllPriorities` 在生成快照时，则直接执行：
+`SyncHost` and `ResetAllPriorities`, when generating snapshots, go straight through:
 
 ```text
 store.BuildGroupEvidence
 → priority.PlanFreshOnly
 ```
 
-这些路径目前主要生成只读快照，没有直接应用该 Plan，但旧失败缓存可能被展示为当前失败或目标禁用。更重要的是，未来新增调用者必须知道并复制这条隐藏门禁，否则可能把历史缓存升级为可写 Fresh Evidence。
+These paths currently produce read-only snapshots and do not apply the Plan, but an old failure cache entry may be shown as a current failure or a target disable. More importantly, any future caller must know about and copy this hidden gate, or it may promote historical cache into writable Fresh Evidence.
 
-### 为什么需要深化
+### Why deepening is needed
 
-Fresh Evidence 决定 Plan 是否能够产生 Host 写回，是调度系统的安全门禁。调用者不应通过拼接五个状态字段和比较时间戳来恢复这一领域概念。
+Fresh Evidence decides whether a Plan may produce a Host write-back; it is the scheduling system's safety gate. Callers should not have to reconstruct this domain concept by combining five status fields and comparing timestamps.
 
-如果每个调用者必须知道缓存来源、观察时间、探测结果和预测用途，当前 evidence interface 就过于复杂，且容易误用。
+If every caller must know the cache source, observation time, probe result and intended use, the current evidence interface is too complex and easy to misuse.
 
 ### Deletion test
 
-如果删除 `currentRoundEvidence`，复杂度不会消失，而会立刻散回所有 Planner 调用者：每个调用者都需要重新实现观察时间、成功状态和失败状态过滤。
+Deleting `currentRoundEvidence` would not remove complexity; it would immediately scatter back into every Planner caller, each of which would have to re-implement filtering on observation time, success status and failure status.
 
-这说明“本轮可写证据”和“历史只读证据”的选择值得集中到现有 evidence module 中。该方向不需要增加 adapter，应通过深化 in-process implementation 获得 depth。
+This shows that choosing between "current-round writable evidence" and "historical read-only evidence" is worth centralizing in the existing evidence module. This direction needs no new adapter; it gains depth by deepening the in-process implementation.
 
-### 深化方向
+### Deepening direction
 
-让 evidence 生成与选择 module 成为 Fresh Evidence 的唯一权威，在内部吸收：
+Make the evidence generation and selection module the single authority for Fresh Evidence, absorbing internally:
 
-- `ObservedAt` 与当前调度轮次的关系；
-- 成功和失败探测的 provenance；
-- 缓存观察与 Fresh Evidence 的差异；
-- 可用于 Host 写回的证据；
-- 只用于历史预测或诊断展示的证据。
+- how `ObservedAt` relates to the current scheduling round;
+- the provenance of successful and failed probes;
+- the difference between cached observations and Fresh Evidence;
+- evidence that may be used for Host write-back;
+- evidence used only for historical prediction or diagnostic display.
 
-调用者只表达用途，不再自行解释多个 freshness 字段。具体 interface 在后续设计阶段确定。
+Callers only state their intended use and no longer interpret multiple freshness fields themselves. The concrete interface will be decided in a later design phase.
 
-### 优化目的
+### Goals
 
-- 让 Fresh Evidence 定义只有一个 implementation；
-- 防止缓存证据被意外升级为可写证据；
-- 消除 Runtime 调用者对时间戳和状态组合的重复判断；
-- 让 Planner 接收语义清晰且来源明确的输入；
-- 让证据规则通过一个稳定 interface 完整测试。
+- Give the Fresh Evidence definition exactly one implementation.
+- Prevent cached evidence from being accidentally promoted to writable evidence.
+- Remove repeated timestamp and status-combination checks from Runtime callers.
+- Give the Planner semantically clear input with explicit provenance.
+- Make the evidence rules fully testable through one stable interface.
 
-### 预期结果
+### Expected results
 
-- Apply、Sync、Reset 和双 Model Group 预测共享一致的 evidence 语义；
-- 本轮探测失败只产生诊断记录，不改变对应 credential 的 Host 状态；
-- 旧 `ProbeFailed` 不会被误认为当前轮次失败；
-- 新增 Planner 调用者不需要复制 `currentRoundEvidence`；
-- Planner 不再依赖调用者正确拼装五个 freshness 字段；
-- 测试可直接覆盖当前轮成功、当前轮失败、过期成功、过期失败和历史预测；
-- `CONTEXT.md` 中 Fresh Evidence 的领域定义在代码中拥有单一权威。
+- Apply, Sync, Reset and dual Model Group prediction share consistent evidence semantics.
+- A probe failure in the current round only produces a diagnostic record and does not change that credential's Host state.
+- An old `ProbeFailed` is not mistaken for a current-round failure.
+- New Planner callers do not need to copy `currentRoundEvidence`.
+- The Planner no longer depends on callers assembling five freshness fields correctly.
+- Tests can directly cover current-round success, current-round failure, stale success, stale failure and historical prediction.
+- The Fresh Evidence domain definition in `CONTEXT.md` has a single authority in code.
 
-### 风险与约束
+### Risks and constraints
 
-- 不得把缓存预测与 Fresh Evidence 混为同一写入资格；
-- 需要保留 alternate Model Group 的只读预测能力；
-- 当前或历史探测失败都不得触发 quota-driven Host 写回；
-- 不应新增只有一个 adapter 的 port；
-- 不得破坏 Planner 纯函数属性。
+- Cached predictions and Fresh Evidence must not be given the same write eligibility.
+- The read-only prediction capability for the alternate Model Group must be kept.
+- Neither current nor historical probe failures may trigger quota-driven Host write-back.
+- No port with only one adapter should be added.
+- The Planner's pure-function property must not be broken.
 
-### ADR 关系
+### ADR relationship
 
-本提案不与现有 ADR 冲突。设计审问形成的失败语义已记录为 [`ADR-0006`](../adr/0006-failed-quota-probes-preserve-host-state.md)，并强化：
+This proposal does not conflict with existing ADRs. The failure semantics from design interrogation are recorded as [`ADR-0006`](../adr/0006-failed-quota-probes-preserve-host-state.md), and they reinforce:
 
-- `CONTEXT.md` 中 Fresh Evidence 的定义；
-- ADR-0003 对真实 Soft Depletion 与 Hard Depletion 的处置，但不把探测失败误判为耗尽；
-- 第一轮状态引擎深化提案，但不重复其缓存与采样职责。
+- the definition of Fresh Evidence in `CONTEXT.md`;
+- ADR-0003's handling of real Soft Depletion and Hard Depletion, without misclassifying probe failure as depletion;
+- the Round 1 state engine deepening proposal, without duplicating its caching and sampling responsibilities.
 
-### 设计审问已确认决策（2026-08-22）
+### Decisions confirmed in design interrogation (2026-08-22)
 
-以下结论已经通过 `/grill-with-docs` 与用户确认，后续设计和实施不得静默改变：
+The following conclusions were confirmed with the user via `/grill-with-docs`; later design and implementation must not change them silently:
 
-1. **Fresh Evidence 只来自本轮成功探测**：数据必须属于当前调度轮次、探测成功且经过验证；
-2. **探测失败代表未知**：Manual Apply 探测失败，或 Auto Apply 重试后仍失败时，该凭证保持 Host 原状态，只记录并展示失败；
-3. **credential 之间独立规划**：一个 credential 探测失败不阻止其他取得 Fresh Evidence 的 credential 继续调度；
-4. **历史缓存只读**：上次成功数据可以明确标记为历史数据，用于展示或预测，但不能授权 Host 写回；从未成功时显示未知；
-5. **运行事件与人工命令独立授权**：429 Reactive Cooldown 和 Reset Priority 分别由真实 429 事件与明确人工操作授权，不伪装成 Fresh Evidence；
-6. **后续轮次自然补偿**：本轮不因探测失败修改 Host，也不增加新的恢复流程，由后续定时轮重新探测和决策。
+1. **Fresh Evidence comes only from a successful probe in the current round**: the data must belong to the current scheduling round, come from a successful probe, and be validated.
+2. **A probe failure means unknown**: when a Manual Apply probe fails, or an Auto Apply probe still fails after retry, that credential keeps its Host state; the failure is only recorded and displayed.
+3. **Credentials are planned independently**: one credential's probe failure does not stop other credentials that have Fresh Evidence from being scheduled.
+4. **Historical cache is read-only**: the last successful data may be shown or used for prediction when clearly marked as historical, but it cannot authorize Host write-back; if there was never a success, show unknown.
+5. **Runtime events and manual commands are authorized separately**: 429 Reactive Cooldown and Reset Priority are authorized by a real 429 event and an explicit manual action respectively, not disguised as Fresh Evidence.
+6. **Later rounds compensate naturally**: this round does not modify the Host because of a probe failure and adds no new recovery flow; later scheduled rounds re-probe and decide again.
 
-#### 明确拒绝的推测性复杂度
+#### Speculative complexity explicitly rejected
 
-以下设计不属于本轮核心需求，除非未来出现可验证的新业务场景：
+The following are not core requirements this round, unless a verifiable new business scenario appears:
 
-- 将探测失败扩展成永久、临时或可配置的错误分类体系；
-- 新增 Fresh Evidence TTL、失败策略或重试策略配置；
-- 建立通用 evidence port、adapter 或跨提供商证据平台；
-- 为探测失败引入独立恢复队列、事件溯源或重放机制。
+- extending probe failures into a permanent, temporary or configurable error taxonomy;
+- adding Fresh Evidence TTL, failure policy or retry policy configuration;
+- building a generic evidence port, adapter or cross-provider evidence platform;
+- introducing a separate recovery queue, event sourcing or replay mechanism for probe failures.
 
 ---
 
-## 3. 深化双 Model Group 规划投影
+## 3. Deepen the dual Model Group planning projection
 
-- **状态**：`讨论完成 (Accepted)`
-- **推荐强度**：`Strong`
-- **依赖类别**：`in-process`
-- **建议优先级**：`P2`
-- **涉及文件**：
+- **Status**: `Accepted`
+- **Recommendation**: `Strong`
+- **Dependency category**: `in-process`
+- **Suggested priority**: `P2`
+- **Files involved**:
   - `internal/runtime/production_runner.go`
   - `internal/runtime/runtime.go`
   - `internal/apply/audit.go`
   - `internal/priority/planner.go`
 
-### 目前的痛点
+### Current pain points
 
-Antigravity 的 `gemini` 与 `claude_gpt` 是两个独立 Model Group。系统使用配置指定的主控 Model Group 产生实际写回，同时为 alternate Model Group 生成只读预测。
+Antigravity's `gemini` and `claude_gpt` are two independent Model Groups. The system uses the configured Control Model Group to produce actual write-back, and generates a read-only prediction for the alternate Model Group.
 
-这一完整投影流程目前在多个 Runtime 用例中重复：
+This full projection flow is currently repeated across several Runtime use cases:
 
 ```text
-读取主控组 evidence
+Read control group evidence
 → PlanFreshOnly
 → Snapshot
 
-计算 alternate Model Group
-→ 读取 alternate evidence
+Compute alternate Model Group
+→ Read alternate evidence
 → PlanFreshOnly
 → SnapshotPredicted
 
 → NewDualGroupSnapshot
 ```
 
-### 精确证据
+### Concrete evidence
 
-#### 3.1 生产调度重复装配双组投影
+#### 3.1 Production scheduling assembles the dual-group projection itself
 
-`runProductionTask` 分别处理主控组与 alternate 组的 evidence、Plan 和 Snapshot，再调用 `NewDualGroupSnapshot`。
+`runProductionTask` handles evidence, Plan and Snapshot for the control group and the alternate group separately, then calls `NewDualGroupSnapshot`.
 
-#### 3.2 SyncHost 重复相同知识
+#### 3.2 SyncHost repeats the same knowledge
 
-`SyncHost` 再次执行主控组和 alternate 组的：
+`SyncHost` again runs, for both the control and alternate groups:
 
 ```text
 BuildGroupEvidence
@@ -442,149 +442,149 @@ BuildGroupEvidence
 → NewDualGroupSnapshot
 ```
 
-#### 3.3 ResetAllPriorities 第三次重复
+#### 3.3 ResetAllPriorities repeats it a third time
 
-Reset 完成 Host 状态变更后，为了更新管理页快照，再次执行同样的双组投影。
+After Reset finishes its Host state changes, it runs the same dual-group projection again to update the management page snapshot.
 
-#### 3.4 LatestSnapshot fallback 维护另一套结果构造规则
+#### 3.4 The LatestSnapshot fallback maintains another set of result-building rules
 
-没有最新双组快照时，`LatestSnapshot` 自行创建一个包含 legacy 单组结果和空 predicted Snapshot 的 fallback。
+When there is no latest dual-group snapshot, `LatestSnapshot` builds its own fallback containing the legacy single-group result and an empty predicted Snapshot.
 
-因此每个调用者都必须知道：
+So every caller must know:
 
-- 主控 Model Group 的来源；
-- alternate Model Group 的计算；
-- 哪个 Plan 可写；
-- 哪个 Snapshot 必须标记为 predicted；
-- cooldown options 与 observation time 的传递；
-- fallback 的结果形状。
+- where the Control Model Group comes from;
+- how the alternate Model Group is computed;
+- which Plan is writable;
+- which Snapshot must be marked predicted;
+- how cooldown options and observation time are passed;
+- the shape of the fallback result.
 
-### 为什么需要深化
+### Why deepening is needed
 
-这不是单纯的代码重复，而是一组必须跨所有调用者保持一致的领域规则。
+This is not just duplicated code; it is a set of domain rules that must stay consistent across all callers.
 
-任何预测语义、cooldown 传播或 Snapshot 结构调整，都需要同时修改 Production、Sync、Reset 和 fallback。遗漏任一路径就可能让管理页在不同操作后展示不同语义。
+Any change to prediction semantics, cooldown propagation or Snapshot structure has to be made in Production, Sync, Reset and the fallback at once. Missing any path can make the management page show different semantics after different operations.
 
-当前测试只能通过大型 Runtime 测试准备 Host inventory、Store、Clock 与两组 evidence，纯投影逻辑没有独立测试表面。
+Today the projection can only be tested through large Runtime tests that set up Host inventory, Store, Clock and two groups of evidence; the pure projection logic has no test surface of its own.
 
 ### Deletion test
 
-删除任意一个重复投影块不会消除复杂度，只会迫使该调用者重新实现主控组、alternate 组、Planner 和 Snapshot 规则。
+Deleting any one duplicated projection block does not remove complexity; it just forces that caller to re-implement the control group, alternate group, Planner and Snapshot rules.
 
-如果将双 Model Group 投影深化为 Runtime 内部 module，再删除它，四条调用路径都必须重建完整算法。这证明该 module 能产生真实 leverage。
+If the dual Model Group projection were deepened into a Runtime-internal module and then deleted, all four call paths would have to rebuild the full algorithm. This proves the module provides real leverage.
 
-### 深化方向
+### Deepening direction
 
-将以下知识集中到 Runtime 内部的 deep module：
+Centralize the following knowledge in a deep module inside the Runtime:
 
-- 主控与 alternate Model Group 的选择；
-- 两组 evidence 到两组 Plan 的映射；
-- 主控结果与 predicted 结果的角色；
-- cooldown options 与 observation time；
-- `DualGroupSnapshot` 的统一构造与空状态。
+- selection of the control and alternate Model Groups;
+- mapping two sets of evidence to two Plans;
+- the roles of the control result and the predicted result;
+- cooldown options and observation time;
+- uniform construction of `DualGroupSnapshot`, including the empty state.
 
-该 module 只负责 in-process 投影，不执行 Host 写回或外部网络请求。Planner 继续保持无副作用纯函数，Runtime 继续拥有调度用例所有权。
+The module only does in-process projection; it performs no Host write-back or external network requests. The Planner stays a side-effect-free pure function, and the Runtime keeps ownership of scheduling use cases.
 
-具体 interface 在后续设计阶段确定。
+The concrete interface will be decided in a later design phase.
 
-### 优化目的
+### Goals
 
-- 让双 Model Group 的投影语义只有一个 implementation；
-- 防止 Production、Sync、Reset 和 fallback 发生行为漂移；
-- 把纯计算从大型 Runtime 用例中提炼为稳定测试表面；
-- 降低未来修改 predicted 规则的影响范围；
-- 保持主控组可写、alternate 组只读的明确契约。
+- Give dual Model Group projection semantics exactly one implementation.
+- Prevent behavioral drift between Production, Sync, Reset and the fallback.
+- Extract pure computation from large Runtime use cases into a stable test surface.
+- Reduce the blast radius of future changes to predicted rules.
+- Keep the explicit contract that the control group is writable and the alternate group is read-only.
 
-### 预期结果
+### Expected results
 
-- 所有 Runtime 用例产生一致的 `DualGroupSnapshot`；
-- 调用者不再自行计算 alternate Model Group；
-- 不会出现某一路径遗漏 `SnapshotPredicted` 标记；
-- 可以通过纯输入测试主控组与预测组，不需要完整 Host 和磁盘设置；
-- Runtime 用例更专注于执行顺序，而不是重复数据投影；
-- 如果未来增加新的只读展示规则，修改位置保持集中。
+- All Runtime use cases produce a consistent `DualGroupSnapshot`.
+- Callers no longer compute the alternate Model Group themselves.
+- No path can forget the `SnapshotPredicted` marker.
+- The control and predicted groups can be tested with pure inputs, without a full Host and disk setup.
+- Runtime use cases focus on execution order rather than repeated data projection.
+- If new read-only display rules are added later, the change stays in one place.
 
-### 风险与约束
+### Risks and constraints
 
-- 不得让 predicted Plan 进入 Host 写回；
-- 不得把网络探测或 Store 持久化吸收到纯投影 implementation；
-- 不得移动 Runtime 对 ManualApply、AutoApply、Probe、SyncHost 与 Reset 的用例所有权；
-- 不得让 Planner 获得副作用；
-- 必须和 Fresh Evidence 深化方向协调，避免新 module 再次解释 freshness 字段。
+- The predicted Plan must never reach Host write-back.
+- Network probing and Store persistence must not be absorbed into the pure projection implementation.
+- The Runtime's use-case ownership of ManualApply, AutoApply, Probe, SyncHost and Reset must not move.
+- The Planner must not gain side effects.
+- This must be coordinated with the Fresh Evidence deepening so the new module does not reinterpret freshness fields.
 
-### ADR 关系
+### ADR relationship
 
-本提案不与现有 ADR 冲突，并符合：
+This proposal does not conflict with existing ADRs and is consistent with:
 
-- ADR-0001 的 Antigravity 单提供商专精化；
-- `CONTEXT.md` 中 `gemini` 与 `claude_gpt` Model Group 的领域定义；
-- AGENTS.md 中 Runtime 对调度用例的唯一所有权。
+- ADR-0001's specialization on Antigravity as the single provider;
+- the domain definitions of the `gemini` and `claude_gpt` Model Groups in `CONTEXT.md`;
+- the Runtime's sole ownership of scheduling use cases in AGENTS.md.
 
-本轮没有形成新的、难以逆转的业务取舍，因此不新增 ADR。实现规格只收拢已经生效的双组契约。
+This round produced no new, hard-to-reverse business trade-off, so no new ADR is added. The implementation spec only consolidates the dual-group contract already in effect.
 
-### 设计审问已确认决策（2026-08-22）
+### Decisions confirmed in design interrogation (2026-08-22)
 
-以下规则已有需求、测试或前轮决策支撑，本轮通过 `/grill-with-docs` 确认保持不变：
+The following rules are already backed by requirements, tests or earlier decisions, and were confirmed unchanged via `/grill-with-docs` this round:
 
-1. **配置是唯一主控权威**：Dynamic Config 中的 `antigravity_model_group` 决定 Control Model Group；接口参数和页面选择器不能改变写回权；
-2. **页面切换只改变视图**：查看另一个 Model Group 不触发网络请求、不更改配置，也不交换 Target 与 Predicted 角色；
-3. **一次探测刷新两组**：单次 Antigravity quota 响应同时解析并保存 `gemini` 与 `claude_gpt`，页面当前查看哪组不改变采集范围；
-4. **Predicted 永远只读**：Control Model Group 产生 Target，Predicted Model Group 只展示“若成为主控组”的结果，不得进入 Host 写回；
-5. **两组数据彼此独立**：某组失败或没有数据时显示未知，不得借用、复制或重新标记另一组的数据；
-6. **所有用例输出一致形状**：Production、Probe、SyncHost、Reset 和启动 fallback 都返回角色明确的完整双组 Snapshot；
-7. **保存配置不立即写 Host**：切换 Control Model Group 后，新的写回权在下一次 Manual Apply 或 Auto Apply 获得 Fresh Evidence 时生效；
-8. **Fresh Evidence authority 保持独立**：投影只消费已经分类的当前或历史 evidence，不再解释 freshness 字段。
+1. **Config is the only control authority**: `antigravity_model_group` in Dynamic Config decides the Control Model Group; API parameters and the page selector cannot change write-back authority.
+2. **Switching on the page only changes the view**: viewing the other Model Group triggers no network request, does not change config, and does not swap the Target and Predicted roles.
+3. **One probe refreshes both groups**: a single Antigravity quota response is parsed and saved for both `gemini` and `claude_gpt`; which group the page is viewing does not change what is collected.
+4. **Predicted is always read-only**: the Control Model Group produces the Target; the Predicted Model Group only shows the result "if it became the control group" and must never reach Host write-back.
+5. **The two groups' data are independent**: when one group fails or has no data it shows unknown, and must not borrow, copy or relabel the other group's data.
+6. **All use cases output the same shape**: Production, Probe, SyncHost, Reset and the startup fallback all return a complete dual-group Snapshot with explicit roles.
+7. **Saving config does not write the Host immediately**: after switching the Control Model Group, the new write-back authority takes effect at the next Manual Apply or Auto Apply that obtains Fresh Evidence.
+8. **Fresh Evidence authority stays separate**: the projection only consumes evidence already classified as current or historical, and does not reinterpret freshness fields.
 
-#### 明确拒绝的推测性复杂度
+#### Speculative complexity explicitly rejected
 
-以下内容不属于本轮核心需求：
+The following are not core requirements this round:
 
-- 支持第三个或任意数量 Model Group 的通用框架；
-- 新增投影策略、切换策略或自动接管配置；
-- 把网络探测、State Store 持久化或 Host 写回吸收到投影 module；
-- 新增数据库、缓存层、后台刷新任务或管理 API；
-- 重新设计历史记录、Management 页面或公开 Snapshot schema。
+- a generic framework for a third or arbitrary number of Model Groups;
+- new projection strategies, switching strategies or automatic takeover config;
+- absorbing network probing, State Store persistence or Host write-back into the projection module;
+- new databases, cache layers, background refresh jobs or management APIs;
+- redesigning history records, the Management page or the public Snapshot schema.
 
 ---
 
-## 4. 按用户功能收拢管理页资产
+## 4. Organize management page assets by user feature
 
-- **状态**：`讨论完成 (Accepted)`
-- **推荐强度**：`Worth exploring`
-- **依赖类别**：`in-process`
-- **建议优先级**：`P3`
-- **涉及文件**：
+- **Status**: `Accepted`
+- **Recommendation**: `Worth exploring`
+- **Dependency category**: `in-process`
+- **Suggested priority**: `P3`
+- **Files involved**:
   - `internal/management/templates.go`
   - `internal/management/template_scripts.go`
   - `internal/management/template_styles.go`
   - `internal/management/template_*.go`
   - `internal/management/templates_test.go`
 
-### 目前的痛点
+### Current pain points
 
-近期提交将原本数千行的嵌入式 CSS 和 JavaScript 大字符串拆分到约 27 个文件。这解决了单文件长度问题，但拆分主要沿技术类型展开：HTML、CSS、JavaScript 和 i18n 分别存放。
+Recent commits split what used to be thousands of lines of embedded CSS and JavaScript strings into about 27 files. That fixed single-file length, but the split mostly follows technology type: HTML, CSS, JavaScript and i18n each live separately.
 
-因此，一个用户功能仍然横跨多个 module。例如配置中心相关知识分布在：
+So one user feature still spans several modules. For example, knowledge about the config center is spread across:
 
 ```text
 TemplateConfig
 templateScriptConfig
 templateStyleConfig
 templateScriptI18N
-公共 controls
-公共 modal
-boot 初始化
+shared controls
+shared modal
+boot initialization
 ```
 
-文件变短了，但完成一次功能修改仍需跨多个位置恢复完整上下文。
+The files are shorter, but making one feature change still requires rebuilding the full context from several places.
 
-### 精确证据
+### Concrete evidence
 
-#### 4.1 JavaScript 片段依赖手工连接顺序
+#### 4.1 JavaScript fragments depend on manual concatenation order
 
-`template_scripts.go` 明确按 dependency order 连接多个私有片段。片段之间通过全局函数、全局变量和 DOM ID 形成隐式 interface。
+`template_scripts.go` explicitly concatenates several private fragments in dependency order. The fragments form an implicit interface through global functions, global variables and DOM IDs.
 
-HTML 中的内联调用，例如：
+Inline calls in the HTML, such as:
 
 ```html
 onclick="openKeyModal()"
@@ -593,173 +593,173 @@ onclick="toggleTheme()"
 onclick="switchTab('overview')"
 ```
 
-要求相关函数必须存在于最终全局作用域，且初始化顺序正确。该 interface 没有被类型或装配结构显式表达。
+require the related functions to exist in the final global scope and to be initialized in the right order. This interface is not expressed explicitly by types or an assembly structure.
 
-#### 4.2 CSS 片段依赖手工 cascade order
+#### 4.2 CSS fragments depend on manual cascade order
 
-`template_styles.go` 按固定顺序连接 token、shell、controls、overview、history、diagnostics、config、overlays 与 responsive 片段。
+`template_styles.go` concatenates the token, shell, controls, overview, history, diagnostics, config, overlays and responsive fragments in a fixed order.
 
-改变连接顺序可能改变选择器覆盖结果，因此文件顺序本身成为调用者必须维护的隐式知识。
+Changing the order can change which selectors win, so file order itself becomes implicit knowledge callers must maintain.
 
-#### 4.3 一个用户功能跨越多种技术文件
+#### 4.3 One user feature spans several technology files
 
-配置、诊断、概览等功能分别横跨 markup、style、behaviour 与语言资源。维护者或 AI 为理解一个按钮，需要打开多个文件并重建全局依赖。
+Features such as config, diagnostics and overview each span markup, style, behaviour and language resources. To understand one button, a maintainer or AI has to open several files and rebuild the global dependencies.
 
-#### 4.4 测试主要检查源码字符串
+#### 4.4 Tests mostly check source strings
 
-`templates_test.go` 当前主要使用：
+`templates_test.go` currently relies mainly on:
 
-- `strings.Contains` 检查元素或源码片段；
-- 正则检查外部 URL；
-- 正则检查 CSS token；
-- 特定 JavaScript 源码 substring 检查行为要求。
+- `strings.Contains` to check for elements or source fragments;
+- regexes to check external URLs;
+- regexes to check CSS tokens;
+- specific JavaScript source substrings to check behavior requirements.
 
-这些测试能够发现资源遗漏，但不能可靠验证：
+These tests catch missing resources, but cannot reliably verify:
 
-- JavaScript 是否可以解析和执行；
-- 全局函数是否在调用时存在；
-- DOM ID 与选择器是否匹配；
-- i18n key 是否完整；
-- 用户操作是否产生预期 DOM 行为；
-- 片段顺序变化是否破坏运行时行为。
+- whether the JavaScript parses and runs;
+- whether global functions exist when called;
+- whether DOM IDs and selectors match;
+- whether i18n keys are complete;
+- whether user actions produce the expected DOM behavior;
+- whether changing fragment order breaks runtime behavior.
 
-测试越过最终资源 interface，直接依赖 implementation 文本。行为不变但写法变化时测试可能失败；源码仍在但实际行为失效时测试可能继续通过。
+The tests bypass the final resource interface and depend directly on implementation text. They can fail when the wording changes but behavior does not, and keep passing when the source is still there but the behavior is broken.
 
-### 为什么需要深化
+### Why deepening is needed
 
-管理页的实际维护单位是用户功能，而不是“所有 CSS”或“所有 JavaScript”。
+The real unit of maintenance for the management page is the user feature, not "all CSS" or "all JavaScript".
 
-理想 locality 应让一个功能的 markup、style、behaviour 与语言资源彼此相邻，同时把装配顺序和共享运行时细节隐藏在 implementation 内。
+Ideal locality puts a feature's markup, style, behaviour and language resources next to each other, while hiding assembly order and shared runtime details inside the implementation.
 
-当前拆分改善了文件长度，但 27 个片段本身大多没有独立行为或稳定 interface。它们依赖最终字符串连接和全局命名才能工作，属于 shallow module。
+The current split improved file length, but most of the 27 fragments have no independent behavior or stable interface. They only work through final string concatenation and global naming, which makes them shallow modules.
 
 ### Deletion test
 
-删除任意单个片段文件并把原字符串搬回聚合文件，行为复杂度不会集中或消失，说明单个片段没有形成显著 depth。
+Deleting any single fragment file and moving its string back into the aggregate file neither concentrates nor removes behavioral complexity, which shows that individual fragments have no significant depth.
 
-如果按用户功能形成 deep module，再删除其中一个功能 module，该功能的 markup、style、behaviour、文案、装配和验证知识会重新散回多个位置。这说明按用户功能集中可以获得更强 locality。
+If deep modules were formed per user feature, deleting one feature module would scatter that feature's markup, style, behaviour, copy, assembly and verification knowledge back across several places. This shows that grouping by user feature gives stronger locality.
 
-### 深化方向
+### Deepening direction
 
-保留最终 `StatusHTML` 的小 interface，但按用户功能集中管理页 implementation，例如从概念上形成：
+Keep the small final `StatusHTML` interface, but organize the management page implementation by user feature, conceptually for example:
 
 ```text
-Overview 功能
-History 功能
-Diagnostics 功能
-Config 功能
-Modal 功能
+Overview feature
+History feature
+Diagnostics feature
+Config feature
+Modal feature
 ```
 
-每个功能内部收拢相关 markup、style、behaviour 和 i18n。最终装配仍生成单个原生、自包含的 `StatusHTML`。
+Each feature gathers its own markup, style, behaviour and i18n. Final assembly still produces a single native, self-contained `StatusHTML`.
 
-测试表面应逐步从源码 substring 转向最终资源的可执行行为，包括脚本解析、DOM 依赖、i18n 完整性和核心用户操作。
+The test surface should gradually move from source substrings to executable behavior of the final resource, including script parsing, DOM dependencies, i18n completeness and core user actions.
 
-具体文件组织和 interface 在后续设计阶段确定。本提案不主张把所有资产重新合并成一个巨型文件。
+The concrete file layout and interface will be decided in a later design phase. This proposal does not advocate merging all assets back into one giant file.
 
-### 优化目的
+### Goals
 
-- 让一次用户功能修改保持 locality；
-- 隐藏全局函数、DOM ID、脚本顺序和 CSS 顺序等装配知识；
-- 减少维护者与 AI 理解一个功能时需要跨越的文件数量；
-- 保持 `StatusHTML` 的小 interface 和自包含交付方式；
-- 让最终浏览器行为成为主要测试表面。
+- Keep a single user feature change local.
+- Hide assembly knowledge such as global functions, DOM IDs, script order and CSS order.
+- Reduce the number of files a maintainer or AI must cross to understand one feature.
+- Keep the small `StatusHTML` interface and self-contained delivery.
+- Make final browser behavior the main test surface.
 
-### 预期结果
+### Expected results
 
-- 修改配置、诊断或概览功能时，相关知识集中在同一 module；
-- JavaScript 全局命名和装配顺序的泄漏减少；
-- CSS cascade order 更集中、更容易验证；
-- 删除一个功能时可同时删除其 markup、style、behaviour 与文案；
-- 测试能够发现脚本解析、DOM 依赖和真实交互故障；
-- `StatusHTML` 继续作为管理页唯一外部 interface；
-- 管理页继续满足 CPA Host 的嵌入式加载要求。
+- Changes to the config, diagnostics or overview features have their related knowledge in one module.
+- Less leakage of JavaScript global names and assembly order.
+- CSS cascade order is more centralized and easier to verify.
+- Deleting a feature deletes its markup, style, behaviour and copy together.
+- Tests catch script parse errors, DOM dependency errors and real interaction failures.
+- `StatusHTML` remains the management page's only external interface.
+- The management page still meets the CPA Host's embedded loading requirements.
 
-### 风险与约束
+### Risks and constraints
 
-- 必须保持纯原生、自包含、运行时零外部 CDN；
-- 必须继续兼容 CPA Host 暗色和明亮主题；
-- 不得引入前端构建链作为 CPA 运行时依赖；
-- 不应退回单个数千行巨型字符串；
-- 功能 module 之间的共享代码必须通过 deletion test，避免制造新的 shallow module；
-- 浏览器行为测试应控制复杂度，避免让测试工具链超过管理页 implementation 本身。
+- Must stay pure native, self-contained, with zero external CDN at runtime.
+- Must remain compatible with the CPA Host's dark and light themes.
+- Must not introduce a frontend build chain as a CPA runtime dependency.
+- Should not fall back to a single giant string thousands of lines long.
+- Code shared between feature modules must pass the deletion test, to avoid creating new shallow modules.
+- Browser behavior tests should keep their complexity in check, so the test toolchain does not outgrow the management page implementation itself.
 
-### ADR 关系
+### ADR relationship
 
-本提案不与现有 ADR 冲突。实施时必须严格保持 AGENTS.md 中 Web UI 的约束：
+This proposal does not conflict with existing ADRs. Implementation must strictly keep the Web UI constraints in AGENTS.md:
 
-- 纯前端原生实现；
-- 自包含；
-- 零外部 CDN；
-- 深度适配 CPA Host 暗色与明亮主题。
+- pure native frontend implementation;
+- self-contained;
+- zero external CDN;
+- full adaptation to the CPA Host's dark and light themes.
 
-本轮没有形成新的、难以逆转的业务取舍，因此不新增 ADR。按用户功能组织资产属于既有管理页契约下的内部架构收拢，也不引入新的领域术语。
+This round produced no new, hard-to-reverse business trade-off, so no new ADR is added. Organizing assets by user feature is an internal architectural consolidation under the existing management page contract and introduces no new domain terms.
 
-### 设计审问已确认决策（2026-08-22）
+### Decisions confirmed in design interrogation (2026-08-22)
 
-以下范围已经通过 `/grill-with-docs` 确认，后续设计和实施应保持聚焦：
+The following scope was confirmed via `/grill-with-docs`; later design and implementation should stay focused on it:
 
-1. **行为等价重组**：本项只改善管理页资产的 locality、装配可靠性与测试表面，不改变用户可见布局、交互流程、文案含义或 Management API 行为；
-2. **唯一外部 interface 保持不变**：`StatusHTML` 继续作为管理页唯一对外资源，`/status` 路由、鉴权与请求语义保持兼容；
-3. **按用户功能拥有资产**：Overview、History、Diagnostics、Config 与 Help 分别收拢自身的 markup、style、behaviour 与 i18n；Shell 只拥有真正跨功能的导航、主题、语言、通知、通用控件和 modal 基础能力；
-4. **运行时约束保持不变**：继续使用纯原生、自包含、零远程 URL/CDN 的页面资源，符合严格 CSP，不给 CPA 运行时增加前端构建链；
-5. **产品能力保持不变**：保留五个功能区、双 Model Group 视图、Probe、Apply、Reset、Diff 确认、中英切换、CPA Host 主题适配、独立明暗选择、响应式布局以及嵌入和直接浏览器访问；
-6. **最终资源是主要测试表面**：验证最终脚本可解析、内联 handler 与 DOM 依赖闭合、i18n 引用完整，并只为配置保存和 Apply 确认等少数高价值流程增加行为测试；
-7. **共享代码必须证明 leverage**：只有被多个用户功能真实复用的能力才进入 Shell，共享 module 不得成为把所有代码重新集中到一起的浅转发层。
+1. **Behavior-equivalent reorganization**: this item only improves locality, assembly reliability and the test surface of management page assets; it does not change user-visible layout, interaction flows, the meaning of copy, or Management API behavior.
+2. **The single external interface stays the same**: `StatusHTML` remains the management page's only external resource, and the `/status` route, auth and request semantics stay compatible.
+3. **Assets are owned by user feature**: Overview, History, Diagnostics, Config and Help each own their markup, style, behaviour and i18n; the Shell only owns truly cross-feature navigation, theme, language, notifications, common controls and modal foundations.
+4. **Runtime constraints stay the same**: page resources remain pure native, self-contained, with zero remote URLs/CDN, compliant with a strict CSP, and add no frontend build chain to the CPA runtime.
+5. **Product capabilities stay the same**: keep the five feature areas, the dual Model Group view, Probe, Apply, Reset, Diff confirmation, Chinese/English switching, CPA Host theme adaptation, independent light/dark selection, responsive layout, and both embedded and direct browser access.
+6. **The final resource is the main test surface**: verify that the final script parses, that inline handlers and DOM dependencies are closed, and that i18n references are complete; add behavior tests only for a few high-value flows such as saving config and confirming Apply.
+7. **Shared code must prove its leverage**: only capabilities genuinely reused by several user features go into the Shell; a shared module must not become a shallow pass-through layer that re-centralizes all code.
 
-#### 明确范围边界
+#### Explicit scope boundaries
 
-本轮不引入新的 UI 设计、前端框架、打包器、npm 应用、CSS-in-JS、插件系统或任意功能注册框架，也不新增浏览器版本矩阵。具体文件布局、内部 interface、选择器管理和测试工具属于实施决策。
+This round introduces no new UI design, frontend framework, bundler, npm app, CSS-in-JS, plugin system or generic feature registration framework, and adds no browser version matrix. Concrete file layout, internal interfaces, selector management and test tooling are implementation decisions.
 
 ---
 
-## 5. 推荐顺序与组合关系
+## 5. Recommended order and how the proposals combine
 
-### 推荐实施顺序
+### Recommended implementation order
 
-| 顺序 | 提案 | 强度 | 主要原因 |
+| Order | Proposal | Strength | Main reason |
 |---|---|---|---|
-| 1 | 统一 Host transition 与执行记录 | Strong | 直接影响 Host 状态、失败表达和审计可信度 |
-| 2 | 收拢 Fresh Evidence 权威归属 | Strong | 决定证据是否具备 Host 写回资格，是领域安全门禁 |
-| 3 | 深化双 Model Group 规划投影 | Strong | 消除重复领域编排并建立纯计算测试表面 |
-| 4 | 按用户功能收拢管理页资产 | Worth exploring | 主要改善维护 locality 与行为测试，当前生产风险较低 |
+| 1 | Unify Host transitions and execution records | Strong | Directly affects Host state, failure reporting and audit trustworthiness |
+| 2 | Consolidate ownership of Fresh Evidence | Strong | Decides whether evidence is eligible for Host write-back; it is the domain safety gate |
+| 3 | Deepen the dual Model Group planning projection | Strong | Removes duplicated domain orchestration and creates a pure-computation test surface |
+| 4 | Organize management page assets by user feature | Worth exploring | Mainly improves maintenance locality and behavior testing; current production risk is low |
 
-### 三个调度候选的组合关系
+### How the three scheduling candidates combine
 
-前三项可以形成一条职责清晰的执行链：
+The first three items form an execution chain with clear responsibilities:
 
 ```text
 Evidence module
-  │  只输出用途明确的当前轮或历史证据
+  │  outputs only current-round or historical evidence with explicit purpose
   ▼
 Dual Model Group projection module
-  │  统一主控组与 predicted 组投影
+  │  uniform projection of control group and predicted group
   ▼
 priority.Planner
-  │  无副作用纯函数，只输出不可变 Plan
+  │  side-effect-free pure function, outputs only an immutable Plan
   ▼
 Host transition / execution record module
-  │  执行门禁、Host transition 与脱敏记录
+  │  executes gating, Host transition and redacted recording
   ▼
 CPA Host + persisted execution history
 ```
 
-该组合保持现有架构所有权：
+This combination keeps the existing architectural ownership:
 
-- Domain Core 负责证据语义和纯规划；
-- Apply Layer 负责 Host transition 与脱敏执行记录；
-- Runtime 负责调度用例、Ticker 与 `runMu` 单飞；
-- Management 与 CGO adapter 保持薄透传。
+- the Domain Core owns evidence semantics and pure planning;
+- the Apply Layer owns Host transitions and redacted execution records;
+- the Runtime owns scheduling use cases, the Ticker and `runMu` single-flight;
+- Management and the CGO adapter stay thin pass-throughs.
 
-### 进入实施前需要确认的问题
+### Questions to settle before implementation
 
-在任何候选进入具体设计或实现前，需要分别确认：
+Before any candidate moves into concrete design or implementation, settle for each:
 
-1. 哪些行为属于目标 module 的外部 interface，哪些只应成为内部 seam；
-2. 是否存在至少两种真实 adapter，还是只需要 in-process implementation；
-3. 哪些现有测试应迁移到新的 interface 测试表面，哪些 shallow module 测试应删除；
-4. 部分 Host transition、失败证据与 predicted Plan 的精确语义；
-5. 是否需要新增或更新 `CONTEXT.md` 领域术语；
-6. 是否有 load-bearing 决策需要记录为新的 ADR。
+1. Which behaviors belong to the target module's external interface, and which should only be internal seams.
+2. Whether there are at least two real adapters, or only an in-process implementation is needed.
+3. Which existing tests should move to the new interface test surface, and which shallow-module tests should be deleted.
+4. The exact semantics of partial Host transitions, failure evidence and predicted Plans.
+5. Whether `CONTEXT.md` domain terms need to be added or updated.
+6. Whether any load-bearing decision needs to be recorded as a new ADR.
 
-在上述问题完成讨论前，本文档不定义具体 interface，也不授权实现代码变更。
+Until these questions are discussed, this document defines no concrete interface and does not authorize implementation code changes.

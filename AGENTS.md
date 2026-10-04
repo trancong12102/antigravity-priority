@@ -1,72 +1,72 @@
 # AGENTS.md
 
-> **说明**：本文档与 [CLAUDE.md](./CLAUDE.md) 保持内容完全一致，共同定义了本项目的核心设计原则、严格交互确认协议、Git 提交验收门禁与发布审阅规范。
+> **Note**: This document is kept identical in content to [CLAUDE.md](./CLAUDE.md). Together they define the project's core design principles, strict interaction protocol, Git commit acceptance gate, and release review rules.
 
 ---
 
-`antigravity-priority` 是专为 CLIProxyAPI (CPA) 打造的高能效、专精型 **Google Antigravity 凭证配额调度与智能提权插件**。
+`antigravity-priority` is an efficient, single-purpose **Google Antigravity credential quota scheduler and priority booster plugin** for CLIProxyAPI (CPA).
 
-### 核心设计原则
-1. **单提供商专精化**：彻底剥离通用启发式与非 Antigravity 逻辑（如 Codex / xAI），只针对 Antigravity 的双时间窗口（5h 短窗 + 7d 周长窗）进行极致优化；
-2. **自适应燃尽学习**：基于连续探测增量（$\Delta R_{\text{5h}} \ge 5\%, \Delta R_{\text{7d}} > 0$）自适应推算周期消耗能力 $C_{\text{cycle}}$ 并通过 EMA 平滑，杜绝用户手动配置负担；
-3. **全局最优调度**：引入**配额燃尽紧迫度（Weekly Urgency）**与**动态提前提权（Dynamic Boost Horizon）**，彻底消除“最后 24 小时大额度账号撑死溢出”的痛点；
-4. **自愈式软降级**：5 小时短窗耗尽仅软降级（`priority = -1, disabled = false`），无需人工干预即可在短窗刷新后自动恢复；周额度耗尽执行硬禁用（`priority = -1, disabled = true`）；
-5. **CPA 深度融合**：嵌入式 Web 管理页纯原生自包含（零外部 CDN），深度适配 CPA 宿主暗色/明亮主题体系。
-
----
-
-## 🛑 严格交互与确认约束 (Strict Interaction Protocol)
-
-除了用户明确输入了 `/<command>` 之类的 skill 或指令（如 `/impl` 等显式自动化指令）以外，当用户对某些功能抱有疑问、要求排查问题、分析缺陷、或要求做某些具体事情时，**严禁未经确认直接修改代码或盲目执行操作**。代理必须严格遵守以下确认流程：
-
-1. **先输出思考与理解**：清晰告知用户你是如何理解用户所说的话和其核心诉求的；
-2. **说明思路与解决路径**：说明你分析问题的思路、可能的根因排查方向或功能实现策略；
-3. **列出具体行动计划**：明确说明你可能会怎么做（将要修改哪些文件、执行哪些命令、调整哪些逻辑）；
-4. **说明预期结果与影响**：清晰阐述完成操作之后的预期结果、系统行为变化及是否有潜在副作用；
-5. **等待用户明确确认**：将上述信息完整反馈给用户，**只有在得到用户的明确回复与确认后，方可开始具体修改或执行操作**。
+### Core design principles
+1. **Single-provider focus**: All generic heuristics and non-Antigravity logic (such as Codex / xAI) are removed. The plugin optimizes only for Antigravity's two windows (5h short window + 7d weekly window).
+2. **Adaptive burn-rate learning**: The per-cycle burn rate $C_{\text{cycle}}$ is inferred from consecutive probe deltas ($\Delta R_{\text{5h}} \ge 5\%, \Delta R_{\text{7d}} > 0$) and smoothed with an EMA, so users never configure it by hand.
+3. **Globally optimal scheduling**: **Weekly Urgency** and the **Dynamic Boost Horizon** remove the "large-quota account overflows in the last 24 hours" problem.
+4. **Self-healing soft depletion**: Exhausting the 5h short window only soft-demotes (`priority = -1, disabled = false`), which recovers on its own after the short window refreshes. Exhausting the weekly quota hard-disables (`priority = -1, disabled = true`).
+5. **Deep CPA integration**: The embedded web management page is fully self-contained (no external CDN) and follows the CPA host's dark/light themes.
 
 ---
 
-## 🔒 Git 提交汇报与验收门禁 (Strict Git Commit Protocol)
+## Strict Interaction Protocol
 
-**每次写完功能或修复后，严禁代理自主执行 Git commit 提交**。即使全量质量门禁完全通过，也必须严格遵守以下汇报与确认流程：
+Unless the user explicitly invokes a skill or command such as `/<command>` (for example `/impl`), when the user asks about a feature, asks you to investigate a problem, analyze a defect, or do something specific, **never change code or run operations without confirmation**. Agents must follow this confirmation flow:
 
-1. **汇报工作情况**：向用户详细汇报本次完成了哪些具体工作、修改了哪些文件、质量门禁的执行结果；
-2. **说明验收需求**：明确说明本次修改是否有需要用户在真机/目标环境下验收的部分（如 Web UI 暗色主题表现、进度条刷新、CPA 宿主加载、接口交互等）；
-3. **提供清晰验收步骤**：给出具体、可执行的验收操作步骤及对应的预期表现；
-4. **等待用户确认**：只有在用户亲自确认验收结果，并给出明确指令（如“可以提交”、“commit”等）后，方可创建 Git commit。**严禁在未经用户明确授权的情况下自行提交**。
-
----
-
-## 🚀 版本发布与提交前审阅规范 (Release & Pre-Commit Audit)
-
-在每次进行版本迭代、功能改动完成、准备向用户提请提交或发布 Release 之前，**AI 智能体必须主动查阅并严格遵循 [`docs/release-checklist.md`](./docs/release-checklist.md)**。
-
-必须严格对照该文档完成以下关联项自检：
-1. **版本号 4 处一致性核对**：`registry.json`、`internal/runtime/runtime.go`、`internal/management/feature_shell_assets.go` 以及 `.github/release-notes/vX.Y.Z.md` 中的版本号必须 100% 同步一致；
-2. **Public docs (this fork)**: `README.md` is English-only and the UI ships English only, with no Chinese text. Keep docs focused on core value; **never put internal `(REQ-xx)` tags in user-facing docs or release notes**;
-3. **架构与元数据契约**：确保 CPA 宿主 `config.yaml` 极简无扰、`buildMetadata()` 不暴露多余抽屉字段、`config.Default()` 作为基石兜底与 UI 配置中心保持一致；
-4. **全套质量验证**：每完成一项功能或缺陷修复，必须先执行与 release workflow 一致的 `golangci-lint v2.12.2`，通过后再执行 `go test ./...`；提交或发布前必须再次执行 `golangci-lint run --timeout=5m`，并执行 `go build ./...`、`go vet ./...`、`go test -v ./...`、`go test -race ./...`，确保零告警与零数据竞争。
+1. **State your understanding first**: Tell the user how you understood their request and its core need.
+2. **Explain your approach**: Describe how you will analyze the problem, likely root-cause directions, or the implementation strategy.
+3. **List a concrete action plan**: Say what you will do (which files you will change, which commands you will run, which logic you will adjust).
+4. **State expected results and impact**: Describe the expected outcome, changes in system behavior, and any potential side effects.
+5. **Wait for explicit confirmation**: Give the user all of the above, and **start changing or running anything only after the user explicitly replies and confirms**.
 
 ---
 
-## 🏗️ 架构分层与所有权规范 (Architecture & Ownership)
+## Strict Git Commit Protocol
 
-- **Domain Core (`internal/core`, `internal/priority`, `internal/state`, `internal/provider/antigravity`)**：
-  - `priority.Planner` 必须为**无副作用纯函数**，只输出不可变 `Plan` 对象；
-  - 严禁在领域核心层调用 CPA 宿主写回或外部网络请求。
-- **Apply Layer (`internal/apply`, `internal/host`)**：
-  - 仅负责根据 `Plan` 门禁（Fresh Evidence、`ForceWrite` 与 `min_change`）执行宿主 `PatchPriority` / `PatchDisabled` 及全脱敏审计落盘。
-- **Application Layer (`internal/runtime`)**：
-  - 唯一拥有调度用例执行所有权（`ManualApply` / `AutoApply` / `Probe` / `SyncHost` / `ResetAllPriorities`）；
-  - 统一协调 Ticker 定时器与单飞互斥锁（`runMu`）。
-- **Adapters (`main.go`, `internal/management`)**：
-  - CGO ABI 导出与 HTTP Management API 仅作为薄适配器层透传调用 Runtime 用例，**严禁自行计算或改写优先级逻辑**；
-  - Web UI（`feature_shell_assets.go`）纯前端原生实现，无外部 CDN，样式完全遵从 CPA 主题。
+**After finishing a feature or fix, agents must never run a Git commit on their own.** Even when the full quality gate passes, follow this reporting and confirmation flow:
+
+1. **Report the work**: Tell the user in detail what was done, which files changed, and the quality gate results.
+2. **State acceptance needs**: Say whether any part of the change needs the user to verify it on a real device or target environment (such as Web UI dark theme rendering, progress bar refresh, CPA host loading, or API interaction).
+3. **Give clear acceptance steps**: Provide concrete, executable verification steps and the expected result of each.
+4. **Wait for user confirmation**: Create a Git commit only after the user has personally confirmed the acceptance results and given an explicit instruction (such as "ok to commit" or "commit"). **Never commit without explicit user authorization.**
 
 ---
 
-## 📚 领域文档与配置索引 (Domain Docs & Configuration)
+## Release & Pre-Commit Audit
+
+Before each version iteration, after finishing a change, and before asking the user to commit or publishing a Release, **the agent must read and strictly follow [`docs/release-checklist.md`](./docs/release-checklist.md)**.
+
+Check the following against that document:
+1. **Four-way version consistency**: The version in `registry.json`, `internal/runtime/runtime.go`, `internal/management/feature_shell_assets.go`, and `.github/release-notes/vX.Y.Z.md` must match exactly.
+2. **Public docs (this fork)**: `README.md`, release notes, and the UI are English-only, with no Chinese text. Keep docs focused on core value; **never put internal `(REQ-xx)` tags in user-facing docs or release notes**.
+3. **Architecture and metadata contracts**: Keep the CPA host `config.yaml` minimal, make sure `buildMetadata()` exposes no extra drawer fields, and keep `config.Default()` as the baseline fallback, consistent with the UI config center.
+4. **Full quality verification**: After each feature or bug fix, run `golangci-lint v2.12.2` (same version as the release workflow) first, then `go test ./...`. Before committing or releasing, run `golangci-lint run --timeout=5m` again, plus `go build ./...`, `go vet ./...`, `go test -v ./...`, and `go test -race ./...`, with zero warnings and zero data races.
+
+---
+
+## Architecture & Ownership
+
+- **Domain Core (`internal/core`, `internal/priority`, `internal/state`, `internal/provider/antigravity`)**:
+  - `priority.Planner` must be a **side-effect-free pure function** that only outputs an immutable `Plan`.
+  - The domain core must never write back to the CPA host or make external network requests.
+- **Apply Layer (`internal/apply`, `internal/host`)**:
+  - Only executes host `PatchPriority` / `PatchDisabled` according to the `Plan` gates (Fresh Evidence, `ForceWrite`, and `min_change`) and persists fully redacted audits.
+- **Application Layer (`internal/runtime`)**:
+  - Sole owner of scheduling use-case execution (`ManualApply` / `AutoApply` / `Probe` / `SyncHost` / `ResetAllPriorities`).
+  - Coordinates the ticker and the single-flight mutex (`runMu`).
+- **Adapters (`main.go`, `internal/management`)**:
+  - The CGO ABI exports and the HTTP Management API are thin adapters that pass calls through to Runtime use cases; **they must never compute or rewrite priority logic themselves**.
+  - The Web UI (`feature_shell_assets.go`) is plain native frontend code with no external CDN, styled entirely after the CPA theme.
+
+---
+
+## Domain Docs & Configuration
 
 ## Agent skills
 
