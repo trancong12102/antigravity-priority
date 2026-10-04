@@ -27,11 +27,15 @@ type devServerOptions struct {
 	Seed           int64
 	Clock          runtime.Clock
 	AutoApply      bool
+	// ManagementKey, when set, makes management routes demand the key the way
+	// CPA does, so the page's session gate can be exercised locally.
+	ManagementKey string
 }
 
 type devServer struct {
-	host    *devHost
-	runtime *runtime.Runtime
+	host          *devHost
+	runtime       *runtime.Runtime
+	managementKey string
 }
 
 func newDevServer(options devServerOptions) (*devServer, error) {
@@ -84,7 +88,7 @@ func newDevServer(options devServerOptions) (*devServer, error) {
 			return nil, fmt.Errorf("enable dev runtime scheduler: %w", err)
 		}
 	}
-	return &devServer{host: fakeHost, runtime: rt}, nil
+	return &devServer{host: fakeHost, runtime: rt, managementKey: strings.TrimSpace(options.ManagementKey)}, nil
 }
 
 func (d *devServer) resolveAuthIndex(r *http.Request) (string, error) {
@@ -155,8 +159,28 @@ func (d *devServer) Handler() http.Handler {
 		_, _ = w.Write(resp)
 	})
 
-	mux.Handle("/", d.runtime.ManagementHandler())
+	mux.Handle("/", d.requireManagementKey(d.runtime.ManagementHandler()))
 	return mux
+}
+
+// requireManagementKey emulates CPA's management authentication: management
+// routes accept the key as a Bearer token or X-Management-Key header.
+func (d *devServer) requireManagementKey(next http.Handler) http.Handler {
+	if d.managementKey == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v0/management/") {
+			bearer := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+			if bearer != d.managementKey && strings.TrimSpace(r.Header.Get("X-Management-Key")) != d.managementKey {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":"invalid management key"}`))
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func main() {
@@ -177,6 +201,7 @@ func main() {
 	accounts := flag.Int("accounts", defaultAccounts, "minimum number of simulated Antigravity auth files")
 	seed := flag.Int64("seed", defaultSeed, "random seed for deterministic quota simulation; zero selects a time-based seed")
 	autoApply := flag.Bool("auto-apply", false, "enable the Runtime scheduler at startup")
+	managementKey := flag.String("management-key", envString("ANTIGRAVITY_DEVSERVER_MANAGEMENT_KEY", ""), "require this Management Key on management routes, as CPA does; empty disables the check")
 	flag.Parse()
 
 	dev, err := newDevServer(devServerOptions{
@@ -186,6 +211,7 @@ func main() {
 		AccountCount:   *accounts,
 		Seed:           *seed,
 		AutoApply:      *autoApply,
+		ManagementKey:  *managementKey,
 	})
 	if err != nil {
 		log.Fatalf("start devserver runtime: %v", err)
@@ -209,6 +235,9 @@ func main() {
 	fmt.Printf(" Server listening on: http://%s/status\n", displayAddress)
 	fmt.Printf(" Simulated CPA auth files: %s (%d minimum accounts)\n", filepath.Clean(*authDir), *accounts)
 	fmt.Println(" Simulated Antigravity quota requests stay inside the devserver.")
+	if strings.TrimSpace(*managementKey) != "" {
+		fmt.Println(" Management routes require the configured Management Key (CPA-style).")
+	}
 	fmt.Println(" Simulation Hooks for Manual 429 Testing:")
 	fmt.Printf("   POST http://%s/dev/simulate-429?auth_index=<authIndex>\n", displayAddress)
 	fmt.Printf("   POST http://%s/dev/simulate-success?auth_index=<authIndex>\n", displayAddress)

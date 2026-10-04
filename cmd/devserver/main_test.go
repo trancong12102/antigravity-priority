@@ -493,3 +493,49 @@ func TestDevServer_SimulationEndpoints(t *testing.T) {
 		t.Fatalf("priority after success = %d, want %d", curFiles[0].Priority, origPriority)
 	}
 }
+
+func TestDevServer_ManagementKeyGuardsManagementRoutes(t *testing.T) {
+	tempDir := t.TempDir()
+	dev, err := newDevServer(devServerOptions{
+		AuthDir:        filepath.Join(tempDir, "auths"),
+		QuotaStatePath: filepath.Join(tempDir, "quota.json"),
+		StateCachePath: filepath.Join(tempDir, "cache.json"),
+		AccountCount:   1,
+		Clock:          &devTestClock{now: time.Date(2026, 8, 23, 10, 0, 0, 0, time.UTC)},
+		ManagementKey:  "dev-key",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = dev.runtime.Shutdown(context.Background())
+	}()
+	handler := dev.Handler()
+	const configPath = "/v0/management/plugins/antigravity-priority/schedule/config"
+
+	cases := []struct {
+		name   string
+		path   string
+		header map[string]string
+		want   int
+	}{
+		{name: "page needs no key", path: "/status", want: http.StatusOK},
+		{name: "missing key", path: configPath, want: http.StatusUnauthorized},
+		{name: "wrong key", path: configPath, header: map[string]string{"Authorization": "Bearer nope"}, want: http.StatusUnauthorized},
+		{name: "bearer key", path: configPath, header: map[string]string{"Authorization": "Bearer dev-key"}, want: http.StatusOK},
+		{name: "header key", path: configPath, header: map[string]string{"X-Management-Key": "dev-key"}, want: http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			for name, value := range tc.header {
+				req.Header.Set(name, value)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.want {
+				t.Fatalf("GET %s = %d, want %d (body %s)", tc.path, rec.Code, tc.want, rec.Body.String())
+			}
+		})
+	}
+}
