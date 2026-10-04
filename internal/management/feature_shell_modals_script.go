@@ -181,9 +181,9 @@ const templateScriptModals = `        const MANUAL_APPLY_RECHECK = "Confirm to f
                         "<div class=\"diff-reason\">" + escapeHTML(reasonText) + "</div>" +
                     "</div>" +
                     "<div class=\"diff-value-box\">" +
-                        "<span class=\"diff-from\">" + fromP + "</span>" +
+                        "<span class=\"diff-from\">" + escapeHTML(String(fromP)) + "</span>" +
                         "<span>&rarr;</span>" +
-                        "<span class=\"diff-to\">" + toP + "</span>" +
+                        "<span class=\"diff-to\">" + escapeHTML(String(toP)) + "</span>" +
                     "</div>";
                     list.appendChild(row);
                 });

@@ -48,6 +48,21 @@ const templateScriptBoot = `        // Connects through the CPAMC session; the f
             }
         });
 
+        // Credential cards are re-rendered from server data, so their buttons
+        // carry identifiers in data attributes instead of inline handlers.
+        document.getElementById("credentialsContainer").addEventListener("click", function(event) {
+            var button = event.target.closest("button[data-credential-action]");
+            if (!button) return;
+            var authIndex = button.dataset.authIndex || "";
+            if (button.dataset.credentialAction === "probe") probeSingleCredential(authIndex, button);
+            else if (button.dataset.credentialAction === "samples") openSamplesModal(authIndex, button.dataset.credentialName || "");
+        });
+
+        document.getElementById("historyList").addEventListener("click", function(event) {
+            var button = event.target.closest("button[data-history-index]");
+            if (button) showHistoryDetails(Number(button.dataset.historyIndex));
+        });
+
         initializeChrome();
         startSession();
     </script>

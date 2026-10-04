@@ -46,7 +46,7 @@ func TestOverview_SingleProbeButtonAndStatusDisabledBadge(t *testing.T) {
 	if !strings.Contains(StatusHTML, `probeSingleCredential`) {
 		t.Fatal("overview must include probeSingleCredential script function")
 	}
-	if !strings.Contains(StatusHTML, `onclick=\"probeSingleCredential('`) {
+	if !strings.Contains(StatusHTML, `data-credential-action=\"probe\" data-auth-index=\"" + escapeHTML(authIdx)`) {
 		t.Fatal("overview card must render single-credential probe button")
 	}
 	if !strings.Contains(StatusHTML, `statusBadge = "<span class=\"badge badge-subtle\">Disabled</span>";`) {
@@ -54,6 +54,16 @@ func TestOverview_SingleProbeButtonAndStatusDisabledBadge(t *testing.T) {
 	}
 	if !strings.Contains(StatusHTML, `item.target && item.target.disabled && !isManuallyDisabled`) {
 		t.Fatal("overview depleted count must exclude manually disabled accounts")
+	}
+}
+
+// Server data must never be spliced into an inline event handler: HTML
+// entity escaping is undone before the handler's JavaScript is parsed, so a
+// quote in an auth index or email would break out of the string literal.
+func TestStatusHTML_NoServerDataInInlineHandlers(t *testing.T) {
+	inlineHandler := regexp.MustCompile(`on[a-z]+=\\?"[^"]*"\s*\+`)
+	if match := inlineHandler.FindString(StatusHTML); match != "" {
+		t.Fatalf("inline event handler built by string concatenation: %s", match)
 	}
 }
 

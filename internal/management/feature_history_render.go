@@ -44,10 +44,10 @@ const templateScriptHistory = `        function formatHistoryKind(entry) {
                             "<strong>" + escapeHTML(dateStr) + "</strong>" +
                         "</div>" +
                         "<div class=\"history-stats\">" +
-                            "<span class=\"badge badge-success\">Succeeded " + (entry.succeeded || 0) + "</span>" +
-                            "<span class=\"badge" + (entry.failed ? " badge-danger" : " badge-subtle") + "\">Failed " + (entry.failed || 0) + "</span>" +
-                            "<span class=\"badge badge-subtle\">Skipped " + (entry.skipped || 0) + "</span>" +
-                            (hasSnapshot ? "<button type=\"button\" class=\"button secondary mini\" onclick=\"showHistoryDetails(" + idx + ")\">" + ICONS.search + "<span>Details</span></button>" : "") +
+                            "<span class=\"badge badge-success\">Succeeded " + (Number(entry.succeeded) || 0) + "</span>" +
+                            "<span class=\"badge" + (entry.failed ? " badge-danger" : " badge-subtle") + "\">Failed " + (Number(entry.failed) || 0) + "</span>" +
+                            "<span class=\"badge badge-subtle\">Skipped " + (Number(entry.skipped) || 0) + "</span>" +
+                            (hasSnapshot ? "<button type=\"button\" class=\"button secondary mini\" data-history-index=\"" + idx + "\">" + ICONS.search + "<span>Details</span></button>" : "") +
                         "</div>" +
                     "</div>" +
                     (msg ? "<div class=\"history-message\">" + escapeHTML(msg) + "</div>" : "");

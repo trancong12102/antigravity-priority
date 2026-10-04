@@ -78,7 +78,7 @@ const templateScriptDiagnostics = `        let latestDiagnostics = null;
                 } else {
                     schedBadge.className = "badge badge-success";
                     schedBadge.textContent = "Running";
-                    schedCountdown.innerHTML = "Next run in <span class=\"meter-countdown\" data-scheduler-countdown=\"" + (nextRunAt || "") + "\">" + nextStr + "</span>";
+                    schedCountdown.innerHTML = "Next run in <span class=\"meter-countdown\" data-scheduler-countdown=\"" + escapeHTML(nextRunAt) + "\">" + escapeHTML(nextStr) + "</span>";
                 }
                 schedInterval.textContent = sched.interval || "-";
             }
@@ -191,7 +191,7 @@ const templateScriptDiagnostics = `        let latestDiagnostics = null;
                             "</div>" +
                             "<div class=\"diag-cooldown-timer\">" +
                                 "<span>Recovers in</span>" +
-                                "<span class=\"meter-countdown\" data-cooldown-countdown=\"" + (cdUntil || "") + "\">" + cdCountdownStr + "</span>" +
+                                "<span class=\"meter-countdown\" data-cooldown-countdown=\"" + escapeHTML(cdUntil) + "\">" + escapeHTML(cdCountdownStr) + "</span>" +
                             "</div>" +
                         "</div>";
                     });

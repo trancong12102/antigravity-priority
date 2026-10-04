@@ -10,7 +10,7 @@ const templateScriptOverviewRender = `        function quotaFillClass(percent) {
             return "<div class=\"meter\">" +
                 "<div class=\"meter-label-row\">" +
                     "<span>" + label + " <strong>" + percent + "%</strong></span>" +
-                    "<span class=\"meter-countdown\" data-reset-time=\"" + (resetAt || "") + "\">" + formatCountdown(resetAt) + "</span>" +
+                    "<span class=\"meter-countdown\" data-reset-time=\"" + escapeHTML(resetAt) + "\">" + escapeHTML(formatCountdown(resetAt)) + "</span>" +
                 "</div>" +
                 "<div class=\"meter-track\"><div class=\"meter-fill " + quotaFillClass(percent) + "\" style=\"width: " + percent + "%\"></div></div>" +
             "</div>";
@@ -44,7 +44,7 @@ const templateScriptOverviewRender = `        function quotaFillClass(percent) {
                     } else {
                         var nextRunAt = sched.next_run_at;
                         var nextStr = nextRunAt ? formatCountdown(nextRunAt) : (sched.next_wait || "-");
-                        el.innerHTML = "Next run in <span class=\"meter-countdown\" data-scheduler-countdown=\"" + (nextRunAt || "") + "\">" + nextStr + "</span>";
+                        el.innerHTML = "Next run in <span class=\"meter-countdown\" data-scheduler-countdown=\"" + escapeHTML(nextRunAt) + "\">" + escapeHTML(nextStr) + "</span>";
                     }
                 }
             }
@@ -159,17 +159,17 @@ const templateScriptOverviewRender = `        function quotaFillClass(percent) {
                     "<div class=\"cred-priority\">" +
                         "<div class=\"priority-score-box\">" +
                             "<span class=\"priority-label\">Actual</span>" +
-                            "<span class=\"priority-actual\">" + actualP + "</span>" +
+                            "<span class=\"priority-actual\">" + escapeHTML(String(actualP)) + "</span>" +
                             "<span class=\"priority-arrow\">&rarr;</span>" +
                             "<span class=\"priority-label\">" + (isPredictedView ? "Predicted" : "Target") + "</span>" +
-                            "<span class=\"priority-score" + (isPredictedView ? " priority-predicted" : "") + "\">" + targetP + "</span>" +
+                            "<span class=\"priority-score" + (isPredictedView ? " priority-predicted" : "") + "\">" + escapeHTML(String(targetP)) + "</span>" +
                             tagBadge +
                         "</div>" +
                         "<div class=\"cred-reason\">" + escapeHTML(formattedReason) + "</div>" +
                     "</div>" +
                     "<div class=\"cred-actions\">" +
-                        "<button type=\"button\" class=\"button secondary mini\" onclick=\"probeSingleCredential('" + escapeHTML(authIdx) + "', this)\">" + ICONS.probe + "<span>Probe</span></button>" +
-                        "<button type=\"button\" class=\"button secondary mini\" onclick=\"openSamplesModal('" + escapeHTML(authIdx) + "', '" + escapeHTML(credDisplayName) + "')\">" + ICONS.chart + "<span>Samples</span></button>" +
+                        "<button type=\"button\" class=\"button secondary mini\" data-credential-action=\"probe\" data-auth-index=\"" + escapeHTML(authIdx) + "\">" + ICONS.probe + "<span>Probe</span></button>" +
+                        "<button type=\"button\" class=\"button secondary mini\" data-credential-action=\"samples\" data-auth-index=\"" + escapeHTML(authIdx) + "\" data-credential-name=\"" + escapeHTML(credDisplayName) + "\">" + ICONS.chart + "<span>Samples</span></button>" +
                     "</div>";
 
                 container.appendChild(card);
