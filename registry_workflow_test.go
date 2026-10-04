@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -155,8 +156,8 @@ func TestWorkflows_Release_MatrixValidation(t *testing.T) {
 	}
 }
 
-func TestDocumentation_BilingualCompleteness(t *testing.T) {
-	docFiles := []string{"README.md", "README.en.md"}
+func TestDocumentation_EnglishReadmeCompleteness(t *testing.T) {
+	docFiles := []string{"README.md"}
 
 	for _, docFile := range docFiles {
 		data, err := os.ReadFile(docFile)
@@ -164,6 +165,9 @@ func TestDocumentation_BilingualCompleteness(t *testing.T) {
 			t.Fatalf("failed to read %s: %v", docFile, err)
 		}
 		content := string(data)
+		if regexp.MustCompile(`\p{Han}`).MatchString(content) {
+			t.Errorf("%s must be English-only", docFile)
+		}
 
 		// Core sections and standardized CPA paths check
 		keywords := []string{
