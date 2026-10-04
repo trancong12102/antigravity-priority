@@ -3,236 +3,120 @@ package management
 // configMarkup contains the HTML owned by the Config feature asset.
 const configMarkup = `
         <section id="panelConfig" hidden>
-            <div class="config-scroll scroll-container">
-                <!-- Card 1: Scheduling & Active Time Window -->
-                <div class="config-card">
-                    <h3 class="config-card-title">
-                        <span>⏰</span>
-                        <span data-i18n="cfgCardScheduleTitle">自动调度与时段配置</span>
-                    </h3>
-
-                    <div class="config-form-grid">
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgAutoApply">自动定时调度</span>
-                                <span class="form-hint" data-i18n="cfgAutoApplyHint">周期性自动探测并智能更新宿主凭证优先级</span>
-                            </div>
-                            <div class="form-input-group">
-                                <label class="toggle-label">
-                                    <span class="toggle-switch">
-                                        <input type="checkbox" id="cfgAutoApply">
-                                        <span class="toggle-slider"></span>
-                                    </span>
-                                    <span id="cfgAutoApplyStatusText">已开启</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgInterval">调度执行周期</span>
-                                <span class="form-hint" data-i18n="cfgIntervalHint">自动调度与探测的执行间隔（如 15m, 30m, 1h）</span>
-                            </div>
-                            <div class="form-input-group">
-                                <select id="cfgIntervalSelect" hidden>
-                                    <option value="5m" data-i18n="optInterval5m">5 分钟</option>
-                                    <option value="15m" selected data-i18n="optInterval15m">15 分钟 (推荐)</option>
-                                    <option value="30m" data-i18n="optInterval30m">30 分钟</option>
-                                    <option value="1h" data-i18n="optInterval1h">1 小时</option>
-                                    <option value="custom" data-i18n="optIntervalCustom">自定义</option>
-                                </select>
-                                <div id="customIntervalSelect" class="custom-select-wrapper" style="min-width:140px;">
-                                    <button type="button" class="custom-select-trigger" onclick="toggleCustomIntervalSelect(event)" aria-haspopup="listbox" aria-expanded="false">
-                                        <span id="customIntervalLabel">15 分钟 (推荐)</span>
-                                        <span class="custom-select-arrow">
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"></path></svg>
-                                        </span>
-                                    </button>
-                                    <div id="customIntervalMenu" class="custom-select-options" hidden role="listbox">
-                                        <div class="custom-select-option" data-value="5m" onclick="selectIntervalOption('5m', event)">
-                                            <span data-i18n="optInterval5m">5 分钟</span>
-                                            <span class="custom-select-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-                                        </div>
-                                        <div class="custom-select-option selected" data-value="15m" onclick="selectIntervalOption('15m', event)">
-                                            <span data-i18n="optInterval15m">15 分钟 (推荐)</span>
-                                            <span class="custom-select-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-                                        </div>
-                                        <div class="custom-select-option" data-value="30m" onclick="selectIntervalOption('30m', event)">
-                                            <span data-i18n="optInterval30m">30 分钟</span>
-                                            <span class="custom-select-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-                                        </div>
-                                        <div class="custom-select-option" data-value="1h" onclick="selectIntervalOption('1h', event)">
-                                            <span data-i18n="optInterval1h">1 小时</span>
-                                            <span class="custom-select-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-                                        </div>
-                                        <div class="custom-select-option" data-value="custom" onclick="selectIntervalOption('custom', event)">
-                                            <span data-i18n="optIntervalCustom">自定义</span>
-                                            <span class="custom-select-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <input type="text" id="cfgIntervalCustom" class="config-time-input" placeholder="15m" hidden>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgModelGroup">配额主控模型组</span>
-                                <span class="form-hint" data-i18n="cfgModelGroupHint">作为主要写回依据的模型组</span>
-                            </div>
-                            <div class="form-input-group">
-                                <select id="cfgModelGroup" hidden>
-                                    <option value="gemini" data-i18n="optGemini">Gemini 模型</option>
-                                    <option value="claude_gpt" data-i18n="optClaudeGPT">Claude 与 GPT 模型</option>
-                                </select>
-                                <div id="customCfgModelGroupSelect" class="custom-select-wrapper" style="min-width:160px;">
-                                    <button type="button" class="custom-select-trigger" onclick="toggleCustomCfgModelSelect(event)" aria-haspopup="listbox" aria-expanded="false">
-                                        <span id="customCfgModelLabel">Gemini 模型</span>
-                                        <span class="custom-select-arrow">
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"></path></svg>
-                                        </span>
-                                    </button>
-                                    <div id="customCfgModelMenu" class="custom-select-options" hidden role="listbox">
-                                        <div class="custom-select-option selected" data-value="gemini" onclick="selectCfgModelOption('gemini', event)">
-                                            <span data-i18n="optGemini">Gemini 模型</span>
-                                            <span class="custom-select-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-                                        </div>
-                                        <div class="custom-select-option" data-value="claude_gpt" onclick="selectCfgModelOption('claude_gpt', event)">
-                                            <span data-i18n="optClaudeGPT">Claude 与 GPT 模型</span>
-                                            <span class="custom-select-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgScheduleWindow">生效时间区间</span>
-                                <span class="form-hint" data-i18n="cfgScheduleWindowHint">仅在每日指定时段运行 (支持跨午夜)</span>
-                            </div>
-                            <div class="form-input-group" style="flex-direction:column; align-items:flex-end; gap:4px;">
-                                <label class="toggle-label" style="font-size:12px;">
-                                    <input type="checkbox" id="cfgWindowEnabled" onchange="onWindowEnabledChange()">
-                                    <span data-i18n="cfgWindowEnabledLabel">仅在指定时段运行</span>
-                                </label>
-                                <div id="cfgWindowInputs" style="display:flex; align-items:center; gap:6px;">
-                                    <input type="text" id="cfgWindowStart" class="config-time-input" placeholder="09:00">
-                                    <span style="color:var(--text-muted); font-weight:700;">-</span>
-                                    <input type="text" id="cfgWindowEnd" class="config-time-input" placeholder="23:00">
-                                </div>
-                            </div>
-                        </div>
+            <div class="command-wrap">
+                <div class="commandbar" aria-label="Configuration actions">
+                    <div class="command-state">
+                        <span class="command-label">Runtime config</span>
+                        <span id="configStateBadge" class="health-badge"><span class="status-dot neutral"></span><span>Loading</span></span>
                     </div>
-                </div>
-
-                <!-- Card 2: Probing & Performance -->
-                <div class="config-card">
-                    <h3 class="config-card-title">
-                        <span>⚡</span>
-                        <span data-i18n="cfgCardPerfTitle">探测与写回性能</span>
-                    </h3>
-
-                    <div class="config-form-grid">
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgMaxConcurrency">最大探测并发数</span>
-                                <span class="form-hint" data-i18n="cfgMaxConcurrencyHint">向 Google API 并发探测的最大协程数 (1-32)</span>
-                            </div>
-                            <div class="form-input-group">
-                                <input type="number" id="cfgMaxConcurrency" class="config-num-input" min="1" max="32" value="6">
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgMinChange">优先级变动写入阈值</span>
-                                <span class="form-hint" data-i18n="cfgMinChangeHint">优先级变化绝对值达到该阈值才写入宿主 (0-100)</span>
-                            </div>
-                            <div class="form-input-group">
-                                <input type="number" id="cfgMinChange" class="config-num-input" min="0" max="100" value="1">
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgUrgencyTolerance">紧迫度分档容差</span>
-                                <span class="form-hint" data-i18n="cfgUrgencyToleranceHint">紧迫度差距在此容差内分配相同优先级 (0.00-0.50)</span>
-                            </div>
-                            <div class="form-input-group">
-                                <input type="number" id="cfgUrgencyTolerance" class="config-num-input" min="0.00" max="0.50" step="0.01" value="0.05">
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgSampleCapacity">自适应时序样本容量</span>
-                                <span class="form-hint" data-i18n="cfgSampleCapacityHint">滑动窗口保留的历史探测样本数，用于平滑估计燃尽率 (2-30)</span>
-                            </div>
-                            <div class="form-input-group">
-                                <input type="number" id="cfgSampleCapacity" class="config-num-input" min="2" max="30" value="6">
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgCooldownMinutes">429 熔断冷却时长 (分钟)</span>
-                                <span class="form-hint" data-i18n="cfgCooldownMinutesHint">遭遇 429 限流时临时降级至 -1 的冷却期 (1-1440)</span>
-                            </div>
-                            <div class="form-input-group">
-                                <input type="number" id="cfgCooldownMinutes" class="config-num-input" min="1" max="1440" value="5">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Card 3: Priority Rules -->
-                <div class="config-card">
-                    <h3 class="config-card-title">
-                        <span>🎯</span>
-                        <span data-i18n="cfgCardRulesTitle">优先级分值规则 (Priority Rules)</span>
-                    </h3>
-
-                    <div class="config-form-grid">
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgBoostStart">🚀 动态 Boost 起始优先级</span>
-                                <span class="form-hint" data-i18n="cfgBoostStartHint">充裕且即将重置的第一梯队凭证起始优先级 (1-999)</span>
-                            </div>
-                            <div class="form-input-group">
-                                <input type="number" id="cfgBoostStartPriority" class="config-num-input" min="1" max="999" value="999">
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-label-box">
-                                <span class="form-title" data-i18n="cfgNormalStart">常规健康凭证起始优先级</span>
-                                <span class="form-hint" data-i18n="cfgNormalStartHint">常规可用梯队凭证的起始基准优先级 (1-999)</span>
-                            </div>
-                            <div class="form-input-group">
-                                <input type="number" id="cfgNormalStartPriority" class="config-num-input" min="1" max="999" value="100">
-                            </div>
-                        </div>
+                    <div class="command-actions">
+                        <button type="button" class="button secondary compact" onclick="resetDynamicConfigToDefaults()" id="btnResetConfig" title="Reset every runtime setting to its default">` + iconReset + `<span class="label-long">Reset to defaults</span></button>
+                        <button type="button" class="button primary compact" onclick="saveDynamicConfig()" id="btnSaveConfig" title="Save and apply immediately" disabled>` + iconSave + `<span class="label-long">Save &amp; apply</span></button>
                     </div>
                 </div>
             </div>
+            <div class="editor">
+                <header class="editor-head">
+                    <div class="editor-title-wrap">
+                        <p class="editor-kicker">Configuration</p>
+                        <h1>Runtime settings</h1>
+                        <p class="editor-subtitle">Changes take effect immediately after saving; nothing here needs a CPA restart.</p>
+                    </div>
+                </header>
 
-            <!-- Floating Capsule Buttons at Bottom Right -->
-            <div class="config-floating-actions">
-                <button type="button" class="btn-secondary" onclick="resetDynamicConfigToDefaults()" id="btnResetConfig">
-                    <span>🔄 <span data-i18n="btnResetToDefaults">恢复默认配置</span></span>
-                </button>
-                <button type="button" class="btn-primary" onclick="saveDynamicConfig()" id="btnSaveConfig" disabled>
-                    <span>💾 <span data-i18n="btnSaveConfig">保存并立即生效</span></span>
-                </button>
+                <section class="card">
+                    <div class="card-head"><div><h2>Auto scheduling and time window</h2><p>When the scheduler probes quota and writes priorities back.</p></div></div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Auto periodic scheduling</strong><span>Periodically probe and update host credential priorities</span></div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="cfgAutoApply">
+                                <span class="switch-track" aria-hidden="true"></span>
+                                <span id="cfgAutoApplyStatusText">Disabled</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Scheduling interval</strong><span>How often probing and scheduling run (e.g. 15m, 30m, 1h)</span></div>
+                        <div class="setting-control">
+                            <select id="cfgIntervalSelect" aria-label="Scheduling interval" onchange="onIntervalSelectChange()">
+                                <option value="5m">5 minutes</option>
+                                <option value="15m" selected>15 minutes (recommended)</option>
+                                <option value="30m">30 minutes</option>
+                                <option value="1h">1 hour</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                            <input type="text" id="cfgIntervalCustom" class="time-input" placeholder="15m" aria-label="Custom interval" hidden>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Primary model group</strong><span>Model group used as the main basis for write-back</span></div>
+                        <div class="setting-control">
+                            <select id="cfgModelGroup" aria-label="Primary model group">
+                                <option value="gemini">Gemini models</option>
+                                <option value="claude_gpt">Claude &amp; GPT models</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Active schedule window</strong><span>Only schedule inside a daily window; crossing midnight works (e.g. 22:00-06:00)</span></div>
+                        <div class="setting-control wide">
+                            <label class="switch">
+                                <input type="checkbox" id="cfgWindowEnabled" onchange="onWindowEnabledChange()">
+                                <span class="switch-track" aria-hidden="true"></span>
+                                <span>Window only</span>
+                            </label>
+                            <div id="cfgWindowInputs" class="window-inputs">
+                                <input type="text" id="cfgWindowStart" class="time-input" placeholder="09:00" aria-label="Window start">
+                                <span class="muted">to</span>
+                                <input type="text" id="cfgWindowEnd" class="time-input" placeholder="23:00" aria-label="Window end">
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="card-head"><div><h2>Probing and performance</h2><p>Concurrency, write thresholds and the adaptive sample window.</p></div></div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Max probe concurrency</strong><span>Maximum concurrent goroutines for Google API probes (1-32)</span></div>
+                        <div class="setting-control"><input type="number" id="cfgMaxConcurrency" min="1" max="32" value="6"></div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Priority change threshold</strong><span>Minimum priority delta before writing back to the host (0-100)</span></div>
+                        <div class="setting-control"><input type="number" id="cfgMinChange" min="0" max="100" value="1"></div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Urgency bucket tolerance</strong><span>Credentials within this tolerance share the same priority (0.00-0.50)</span></div>
+                        <div class="setting-control"><input type="number" id="cfgUrgencyTolerance" min="0.00" max="0.50" step="0.01" value="0.05"></div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Adaptive sample capacity</strong><span>Samples kept in the sliding window for burn-rate estimation (2-30)</span></div>
+                        <div class="setting-control"><input type="number" id="cfgSampleCapacity" min="2" max="30" value="6"></div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>429 cooldown (minutes)</strong><span>How long a credential stays demoted to -1 after a 429 (1-1440)</span></div>
+                        <div class="setting-control"><input type="number" id="cfgCooldownMinutes" min="1" max="1440" value="5"></div>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="card-head"><div><h2>Priority scoring rules</h2><p>Starting priorities for each credential tier.</p></div></div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Dynamic boost start priority</strong><span>Base priority for top-tier credentials with abundant quota (1-999)</span></div>
+                        <div class="setting-control"><input type="number" id="cfgBoostStartPriority" min="1" max="999" value="999"></div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Normal start priority</strong><span>Base priority for regular healthy credentials (1-999)</span></div>
+                        <div class="setting-control"><input type="number" id="cfgNormalStartPriority" min="1" max="999" value="100"></div>
+                    </div>
+                </section>
             </div>
         </section>
 `
 
 var configPageAsset = managementPageAsset{
-	name:            "Config",
-	markup:          configMarkup,
-	styles:          templateStyleConfig,
-	scripts:         templateScriptConfig,
-	translationKeys: configTranslationKeys,
+	name:    "Config",
+	markup:  configMarkup,
+	styles:  templateStyleConfig,
+	scripts: templateScriptConfig,
 }

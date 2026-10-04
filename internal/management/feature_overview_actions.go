@@ -5,19 +5,19 @@ const templateScriptOverviewActionsCore = `        let latestSnapshot = null;
 
         function formatReason(reason, isBoosted, isDisabled) {
             if (!reason) {
-                if (isDisabled) return currentLang === "zh-CN" ? "周额度耗尽" : "Weekly Depleted";
-                if (isBoosted) return currentLang === "zh-CN" ? "🚀 优先提权" : "🚀 Boosted";
-                return currentLang === "zh-CN" ? "正常活跃" : "Active";
+                if (isDisabled) return "Weekly depleted";
+                if (isBoosted) return "Boosted";
+                return "Active";
             }
             var lower = reason.toLowerCase();
-            if (lower.indexOf("boost") >= 0) return currentLang === "zh-CN" ? "🚀 优先提权" : "🚀 Boosted";
-            if (lower.indexOf("remaining positive") >= 0) return currentLang === "zh-CN" ? "余量充足" : "Positive Balance";
-            if (lower.indexOf("weekly depleted") >= 0) return currentLang === "zh-CN" ? "周额度耗尽" : "Weekly Depleted";
-            if (lower.indexOf("short") >= 0 && lower.indexOf("depleted") >= 0) return currentLang === "zh-CN" ? "5h短窗口耗尽" : "5h Depleted";
-            if (lower.indexOf("429") >= 0 || lower.indexOf("cooldown") >= 0) return currentLang === "zh-CN" ? "⏳ 429 冷却中" : "⏳ 429 Cooldown";
-            if (lower.indexOf("predicted") >= 0) return currentLang === "zh-CN" ? "🔮 预测优先级" : "🔮 Predicted";
-            if (lower.indexOf("in sync") >= 0 || lower.indexOf("optimal") >= 0) return currentLang === "zh-CN" ? "状态最优" : "In Sync";
-            if (lower.indexOf("disabled on host") >= 0) return currentLang === "zh-CN" ? "已禁用" : "Disabled";
+            if (lower.indexOf("boost") >= 0) return "Boosted";
+            if (lower.indexOf("remaining positive") >= 0) return "Positive balance";
+            if (lower.indexOf("weekly depleted") >= 0) return "Weekly depleted";
+            if (lower.indexOf("short") >= 0 && lower.indexOf("depleted") >= 0) return "5h depleted";
+            if (lower.indexOf("429") >= 0 || lower.indexOf("cooldown") >= 0) return "429 cooldown";
+            if (lower.indexOf("predicted") >= 0) return "Predicted";
+            if (lower.indexOf("in sync") >= 0 || lower.indexOf("optimal") >= 0) return "In sync";
+            if (lower.indexOf("disabled on host") >= 0) return "Disabled";
             return reason;
         }
 
@@ -27,20 +27,7 @@ const templateScriptOverviewActionsCore = `        let latestSnapshot = null;
             try {
                 const data = await apiFetch(SNAPSHOT_PATH);
                 latestSnapshot = data;
-                if (!userSelectedModelGroup && data && data.active_model_group) {
-                    const select = document.getElementById("modelGroupSelect");
-                    if (select && select.value !== data.active_model_group) {
-                        select.value = data.active_model_group;
-                        updateCustomSelectDisplay();
-                        const menu = document.getElementById("customSelectMenu");
-                        if (menu) {
-                            menu.querySelectorAll(".custom-select-option").forEach(opt => {
-                                const isSelected = opt.getAttribute("data-value") === data.active_model_group;
-                                opt.classList.toggle("selected", isSelected);
-                            });
-                        }
-                    }
-                }
+                syncModelGroupSelect(data && data.active_model_group);
                 renderDashboard();
             } catch (err) {
                 if (!settings.silent && !isAuthBlocked) showToast(err.message, "error");
@@ -69,7 +56,7 @@ const templateScriptOverviewActionsCore = `        let latestSnapshot = null;
 				const data = await apiFetch(SYNC_PATH, { method: "POST" });
                 latestSnapshot = data;
                 renderDashboard();
-                if (settings.notifySync) showToast(t("syncSuccess"), "success");
+                if (settings.notifySync) showToast("Synchronized with CPA host auth files", "success");
             } catch (err) {
                 if (isAuthBlocked) throw err;
                 await fetchSnapshot(settings);
@@ -97,25 +84,22 @@ const templateScriptOverviewActionsCore = `        let latestSnapshot = null;
 
         async function probeSingleCredential(authIndex, btn) {
             if (isAuthBlocked || !authIndex) return;
-            const originalText = btn ? btn.textContent : "";
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = "⏳ " + (currentLang === "zh-CN" ? "探测中..." : "Probing...");
-            }
+            const label = btn ? btn.querySelector("span") : null;
+            const originalText = label ? label.textContent : "";
+            if (btn) btn.disabled = true;
+            if (label) label.textContent = "Probing…";
             try {
                 const groupSelect = document.getElementById("modelGroupSelect");
                 const modelGroup = groupSelect ? groupSelect.value : "gemini";
                 const url = RUN_PATH + "?mode=probe&antigravity_model_group=" + encodeURIComponent(modelGroup) + "&auth_index=" + encodeURIComponent(authIndex);
                 await apiFetch(url, { method: "POST" });
                 await fetchSnapshot({ silent: true });
-                showToast(t("probeSingleSuccess"), "success");
+                showToast("Credential quota updated", "success");
             } catch (err) {
                 showToast(err.message, "error");
             } finally {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = originalText || ("⚡ " + t("btnProbeSingle"));
-                }
+                if (btn) btn.disabled = false;
+                if (label) label.textContent = originalText || "Probe";
             }
         }
 
@@ -167,18 +151,18 @@ const templateScriptOverviewActionsCore = `        let latestSnapshot = null;
             const selectedGroup = groupSelect ? groupSelect.value : "gemini";
             const activeGroup = (dynamicConfig && dynamicConfig.antigravity_model_group) || (latestSnapshot && latestSnapshot.active_model_group) || "gemini";
             if (selectedGroup !== activeGroup) {
-                showToast(currentLang === "zh-CN" ? "仅主控组可执行写回，当前主控组为 " + activeGroup : "Only active group can apply. Active: " + activeGroup, "info");
+                showToast("Only the active model group can apply. Active: " + activeGroup, "info");
                 return;
             }
             const groupData = (latestSnapshot && latestSnapshot.groups && latestSnapshot.groups[selectedGroup]) || {};
             const items = groupData.items || [];
             if (items.length === 0) {
-                showToast(currentLang === "zh-CN" ? "未发现有效凭证，无需执行写回" : "No credentials found to apply", "info");
+                showToast("No credentials found to apply", "info");
                 return;
             }
             const preview = buildApplyPreview(groupData);
             if (preview.changes.length === 0) {
-                showToast(t("noChangesToApply"), "info");
+                showToast("All credentials are in their optimal state; nothing to apply", "info");
                 return;
             }
 
@@ -206,9 +190,9 @@ const templateScriptOverviewActionsCore = `        let latestSnapshot = null;
                 const succeeded = (result && result.succeeded !== undefined) ? result.succeeded : 0;
                 const attempted = (result && result.attempted !== undefined) ? result.attempted : 0;
                 if (succeeded > 0 || attempted > 0) {
-                    showToast(currentLang === "zh-CN" ? "已成功写回 CPA 宿主凭证优先级" : "Applied credential priorities to CPA host successfully", "success");
+                    showToast("Applied credential priorities to the CPA host", "success");
                 } else {
-                    showToast(t("noChangesToApply"), "info");
+                    showToast("All credentials are in their optimal state; nothing to apply", "info");
                 }
                 await refreshDashboard({ silent: true });
             } catch (err) {

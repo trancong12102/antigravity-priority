@@ -428,11 +428,11 @@ func (h *Handler) handleGetSamples(w http.ResponseWriter, r *http.Request) {
 		"auth_index": authIndex,
 		"groups": map[string]any{
 			"gemini": map[string]any{
-				"name":    "Gemini 模型",
+				"name":    "Gemini models",
 				"samples": geminiSamples,
 			},
 			"claude_gpt": map[string]any{
-				"name":    "Claude & GPT 模型",
+				"name":    "Claude & GPT models",
 				"samples": claudeSamples,
 			},
 		},

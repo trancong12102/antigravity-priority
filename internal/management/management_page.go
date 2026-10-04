@@ -6,11 +6,10 @@ import "strings"
 // management-page assembler. A feature supplies all of its document assets
 // together; the assembler owns the final CSS and JavaScript ordering.
 type managementPageAsset struct {
-	name            string
-	markup          string
-	styles          string
-	scripts         string
-	translationKeys []string
+	name    string
+	markup  string
+	styles  string
+	scripts string
 }
 
 // managementPageFeatures is deliberately ordered by the visible navigation.
@@ -28,12 +27,12 @@ const managementPageDocumentStart = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
     <title>Antigravity Priority</title>
     <style>`
 
 const managementPageDocumentEnd = `
-    </div>
 </body>
 </html>
 `
@@ -57,6 +56,7 @@ func assembleManagementPage() string {
 	for _, feature := range managementPageFeatures {
 		page.WriteString(feature.markup)
 	}
+	page.WriteString(managementPageShellMarkupEnd)
 	page.WriteString(shellModalMarkup)
 	page.WriteString(managementPageShellScripts)
 	for _, feature := range managementPageFeatures {

@@ -1,18 +1,30 @@
 package management
 
-const templateScriptOverviewRender = `        function renderDashboard() {
+const templateScriptOverviewRender = `        function quotaFillClass(percent) {
+            if (percent <= 10) return "meter-fill-danger";
+            if (percent <= 30) return "meter-fill-warning";
+            return "meter-fill-healthy";
+        }
+
+        function renderQuotaMeter(label, percent, resetAt) {
+            return "<div class=\"meter\">" +
+                "<div class=\"meter-label-row\">" +
+                    "<span>" + label + " <strong>" + percent + "%</strong></span>" +
+                    "<span class=\"meter-countdown\" data-reset-time=\"" + (resetAt || "") + "\">" + formatCountdown(resetAt) + "</span>" +
+                "</div>" +
+                "<div class=\"meter-track\"><div class=\"meter-fill " + quotaFillClass(percent) + "\" style=\"width: " + percent + "%\"></div></div>" +
+            "</div>";
+        }
+
+        function renderDashboard() {
             if (latestDiagnostics) {
                 var auditEl = document.getElementById("valLastAudit");
-                if (auditEl) auditEl.textContent = latestDiagnostics.latest_audit || "-";
-
-                var sched = latestDiagnostics.scheduler || {};
-                var isAutoApplyEnabled = false;
-                if (dynamicConfig && dynamicConfig.auto_apply !== undefined) {
-                    isAutoApplyEnabled = Boolean(dynamicConfig.auto_apply);
-                } else if (latestDiagnostics.management_api && latestDiagnostics.management_api.auto_apply !== undefined) {
-                    isAutoApplyEnabled = Boolean(latestDiagnostics.management_api.auto_apply);
+                if (auditEl) {
+                    auditEl.textContent = latestDiagnostics.latest_audit || "-";
+                    auditEl.title = latestDiagnostics.latest_audit || "";
                 }
 
+                var sched = latestDiagnostics.scheduler || {};
                 var isPaused = scheduleConfig ? Boolean(scheduleConfig.paused) : Boolean(sched.paused);
                 var isSleeping = false;
                 if (scheduleConfig && scheduleConfig.window_enabled && scheduleConfig.window_start && scheduleConfig.window_end) {
@@ -23,16 +35,16 @@ const templateScriptOverviewRender = `        function renderDashboard() {
 
                 var el = document.getElementById("valNextProbe");
                 if (el) {
-                    if (!isAutoApplyEnabled) {
-                        el.innerHTML = (currentLang === "zh-CN" ? "调度状态: " : "Schedule: ") + "<span style=\"color:var(--text-muted); font-weight:600;\">" + t("scheduleDisabled") + "</span>";
+                    if (!isAutoApplyEnabled()) {
+                        el.textContent = "Auto schedule disabled";
                     } else if (isPaused) {
-                        el.innerHTML = (currentLang === "zh-CN" ? "调度状态: " : "Schedule: ") + "<span style=\"color:var(--accent-yellow-text); font-weight:600;\">" + t("schedulePaused") + "</span>";
+                        el.textContent = "Auto schedule paused";
                     } else if (isSleeping) {
-                        el.innerHTML = (currentLang === "zh-CN" ? "调度状态: " : "Schedule: ") + "<span style=\"color:var(--accent-purple-text); font-weight:600;\">" + t("scheduleSleeping") + "</span>";
+                        el.textContent = "Sleeping outside the schedule window";
                     } else {
                         var nextRunAt = sched.next_run_at;
                         var nextStr = nextRunAt ? formatCountdown(nextRunAt) : (sched.next_wait || "-");
-                        el.innerHTML = (currentLang === "zh-CN" ? "下次调度: " : "Next run: ") + "<span class=\"meter-countdown\" data-scheduler-countdown=\"" + (nextRunAt || "") + "\">" + nextStr + "</span>";
+                        el.innerHTML = "Next run in <span class=\"meter-countdown\" data-scheduler-countdown=\"" + (nextRunAt || "") + "\">" + nextStr + "</span>";
                     }
                 }
             }
@@ -59,50 +71,41 @@ const templateScriptOverviewRender = `        function renderDashboard() {
             });
 
             document.getElementById("valTotalCreds").textContent = items.length;
-            document.getElementById("valTotalDesc").textContent = activeCount + " " + (currentLang === "zh-CN" ? "活跃可用" : "active");
+            document.getElementById("valTotalDesc").textContent = activeCount + " active";
             document.getElementById("valBoosted").textContent = boostedCount;
             document.getElementById("valDepleted").textContent = depletedCount;
 
             container.innerHTML = "";
             if (items.length === 0) {
-                container.innerHTML = "<div class=\"empty-state\">" + t("noCreds") + "</div>";
+                container.innerHTML = "<div class=\"empty-state\">No Antigravity credentials found</div>";
                 return;
             }
 
             items.forEach(item => {
-                const card = document.createElement("div");
+                const card = document.createElement("article");
                 card.className = "cred-card";
 
                 const isBoosted = item.is_boosted;
                 const r5hPercent = Math.max(0, Math.min(100, Math.round((item.r5h || 0) * 100)));
                 const r7dPercent = Math.max(0, Math.min(100, Math.round((item.r7d || 0) * 100)));
-
-                let fill5hClass = "meter-fill-healthy";
-                if (r5hPercent <= 10) fill5hClass = "meter-fill-danger";
-                else if (r5hPercent <= 30) fill5hClass = "meter-fill-warning";
-
-                let fill7dClass = "meter-fill-healthy";
-                if (r7dPercent <= 10) fill7dClass = "meter-fill-danger";
-                else if (r7dPercent <= 30) fill7dClass = "meter-fill-warning";
-
                 const urgency = (item.urgency || 0).toFixed(2);
                 const burnRate = (item.cycle_burn_rate || 0).toFixed(2);
 
                 let actualP = "-";
                 if (item.current) {
-                    if (item.current.disabled) actualP = currentLang === "zh-CN" ? "[已禁用]" : "[Disabled]";
-                    else if (item.current.priority_missing || item.current.priority === undefined || item.current.priority === null) actualP = t("unsetPriority");
+                    if (item.current.disabled) actualP = "[Disabled]";
+                    else if (item.current.priority_missing || item.current.priority === undefined || item.current.priority === null) actualP = "[Unset]";
                     else actualP = item.current.priority;
                 } else if (item.priority_missing || item.priority === undefined || item.priority === null) {
-                    actualP = t("unsetPriority");
+                    actualP = "[Unset]";
                 } else if (item.priority !== undefined && item.priority !== null) {
-                    actualP = item.disabled ? (currentLang === "zh-CN" ? "[已禁用]" : "[Disabled]") : item.priority;
+                    actualP = item.disabled ? "[Disabled]" : item.priority;
                 }
 
                 let targetP = "-";
                 if (item.target) {
-                    if (item.target.disabled) targetP = currentLang === "zh-CN" ? "[已禁用]" : "[Disabled]";
-                    else if (item.target.priority_missing || item.target.priority === undefined || item.target.priority === null) targetP = t("unsetPriority");
+                    if (item.target.disabled) targetP = "[Disabled]";
+                    else if (item.target.priority_missing || item.target.priority === undefined || item.target.priority === null) targetP = "[Unset]";
                     else targetP = item.target.priority;
                 } else {
                     targetP = actualP;
@@ -110,78 +113,63 @@ const templateScriptOverviewRender = `        function renderDashboard() {
 
                 let tagBadge = "";
                 if (isPredictedView) {
-                    tagBadge = "<span class=\"badge badge-predicted\">" + t("predictedBadge") + "</span>";
+                    tagBadge = "<span class=\"badge badge-predicted\">Predicted</span>";
                 } else if (pendingAuthIndexes.has(item.auth_index)) {
-                    tagBadge = "<span class=\"badge badge-pending\">" + t("pendingApply") + "</span>";
+                    tagBadge = "<span class=\"badge badge-pending\">Pending</span>";
                 } else if (String(actualP) !== String(targetP)) {
-                    tagBadge = "<span class=\"badge badge-warning\">" + t("targetChanged") + "</span>";
+                    tagBadge = "<span class=\"badge badge-warning\">Target changed</span>";
                 }
 
                 const probeFailed = item.reason && (item.reason.indexOf("probe failed") >= 0 || item.reason.indexOf("probe invalid") >= 0);
                 const isManuallyDisabled = item.reason && item.reason.indexOf("disabled on host") >= 0;
-                let statusBadge = "<span class=\"badge badge-success\">" + t("statusActive") + "</span>";
+                let statusBadge = "<span class=\"badge badge-success\">Active</span>";
                 if (probeFailed) {
-                    statusBadge = "<span class=\"badge badge-warning\">" + t("statusFailed") + "</span>";
+                    statusBadge = "<span class=\"badge badge-warning\">Probe failed</span>";
                 } else if (isManuallyDisabled) {
-                    statusBadge = "<span class=\"badge badge-secondary\">" + t("statusDisabled") + "</span>";
+                    statusBadge = "<span class=\"badge badge-subtle\">Disabled</span>";
                 } else if (item.target && item.target.disabled) {
-                    statusBadge = "<span class=\"badge badge-danger\">" + t("statusWeeklyDepleted") + "</span>";
+                    statusBadge = "<span class=\"badge badge-danger\">Weekly depleted</span>";
                 } else if (item.reason && item.reason.indexOf("429") >= 0) {
-                    statusBadge = "<span class=\"badge badge-warning\">" + t("statusCooldown") + "</span>";
+                    statusBadge = "<span class=\"badge badge-warning\">429 cooldown</span>";
                 } else if (isBoosted) {
-                    statusBadge = "<span class=\"badge badge-boost\">" + t("statusBoosted") + "</span>";
+                    statusBadge = "<span class=\"badge badge-boost\">Boosted</span>";
                 }
                 const formattedReason = formatReason(item.reason, isBoosted, item.target && item.target.disabled);
                 const authIdx = item.auth_index || "";
                 const credDisplayName = item.email || "Credential";
 
                 card.innerHTML =
-					"<div class=\"cred-info\">" +
-						"<div class=\"cred-name\">" +
-							"<span class=\"cred-email\">" + escapeHTML(credDisplayName) + "</span>" +
-							"<span class=\"cred-meta\"> · " + escapeHTML(item.plan_type || "Antigravity") + "</span>" +
-						"</div>" +
-                        "<div class=\"cred-badge-row\">" +
-                            statusBadge +
-                            "<div class=\"metric-pill metric-pill-urgency\">" + t("urgencyLabel") + "<strong>" + urgency + "</strong></div>" +
-                            "<div class=\"metric-pill metric-pill-burn\">" + t("burnLabel") + "<strong>" + burnRate + "</strong></div>" +
-                            "<div style=\"margin-left:auto; display:flex; gap:4px;\">" +
-                                "<button type=\"button\" class=\"btn-secondary\" style=\"min-height:20px; height:20px; padding:0 6px; font-size:11px; border-radius:4px;\" onclick=\"probeSingleCredential('" + escapeHTML(authIdx) + "', this)\">⚡ " + t("btnProbeSingle") + "</button>" +
-                                "<button type=\"button\" class=\"btn-secondary\" style=\"min-height:20px; height:20px; padding:0 6px; font-size:11px; border-radius:4px;\" onclick=\"openSamplesModal('" + escapeHTML(authIdx) + "', '" + escapeHTML(credDisplayName) + "')\">📊 " + t("btnSamples") + "</button>" +
+                    "<div class=\"cred-head\">" +
+                        "<div class=\"cred-name\">" +
+                            "<div class=\"cred-title\">" +
+                                "<span class=\"cred-email\" title=\"" + escapeHTML(credDisplayName) + "\">" + escapeHTML(credDisplayName) + "</span>" +
+                                "<span class=\"cred-meta\"> · " + escapeHTML(item.plan_type || "Antigravity") + "</span>" +
                             "</div>" +
                         "</div>" +
-                    "</div>" +
-
-                    "<div class=\"meter-container\">" +
-                        "<div class=\"meter-label-row\">" +
-                            "<span>" + t("shortWindow") + " (" + r5hPercent + "%)</span>" +
-                            "<span class=\"meter-countdown\" data-reset-time=\"" + (item.short_window_reset_at || "") + "\">" + formatCountdown(item.short_window_reset_at) + "</span>" +
-                        "</div>" +
-                        "<div class=\"meter-track\">" +
-                            "<div class=\"meter-fill " + fill5hClass + "\" style=\"width: " + r5hPercent + "%\"></div>" +
+                        "<div class=\"cred-badge-row\">" +
+                            statusBadge +
+                            "<span class=\"chip\">Urgency <strong>" + urgency + "</strong></span>" +
+                            "<span class=\"chip\">Burn rate <strong>" + burnRate + "</strong></span>" +
                         "</div>" +
                     "</div>" +
-
-                    "<div class=\"meter-container\">" +
-                        "<div class=\"meter-label-row\">" +
-                            "<span>" + t("longWindow") + " (" + r7dPercent + "%)</span>" +
-                            "<span class=\"meter-countdown\" data-reset-time=\"" + (item.long_window_reset_at || "") + "\">" + formatCountdown(item.long_window_reset_at) + "</span>" +
-                        "</div>" +
-                        "<div class=\"meter-track\">" +
-                            "<div class=\"meter-fill " + fill7dClass + "\" style=\"width: " + r7dPercent + "%\"></div>" +
-                        "</div>" +
+                    "<div class=\"cred-meters\">" +
+                        renderQuotaMeter("5h window", r5hPercent, item.short_window_reset_at) +
+                        renderQuotaMeter("7d window", r7dPercent, item.long_window_reset_at) +
                     "</div>" +
-
                     "<div class=\"cred-priority\">" +
-                        "<div class=\"priority-score-box\" style=\"flex-wrap:wrap;\">" +
-                            "<span style=\"font-size:11.5px; color:var(--text-muted); font-weight:600;\">" + t("actualPriority") + ":</span>" +
-                            "<span style=\"font-size:12.5px; font-weight:700; color:var(--text-secondary); font-family:SFMono-Regular, Consolas, Menlo, monospace;\">" + actualP + "</span>" +
-                            "<span style=\"color:var(--border-color); margin:0 1px;\">|</span>" +
-                            "<span style=\"font-size:11.5px; color:var(--text-muted); font-weight:600;\">" + (isPredictedView ? t("predictedPriority") : t("targetPriority")) + ":</span>" +
+                        "<div class=\"priority-score-box\">" +
+                            "<span class=\"priority-label\">Actual</span>" +
+                            "<span class=\"priority-actual\">" + actualP + "</span>" +
+                            "<span class=\"priority-arrow\">&rarr;</span>" +
+                            "<span class=\"priority-label\">" + (isPredictedView ? "Predicted" : "Target") + "</span>" +
                             "<span class=\"priority-score" + (isPredictedView ? " priority-predicted" : "") + "\">" + targetP + "</span>" +
                             tagBadge +
                         "</div>" +
-                        "<div style=\"font-size:11px; color:var(--text-secondary);\">" + escapeHTML(formattedReason) + "</div>" +
+                        "<div class=\"cred-reason\">" + escapeHTML(formattedReason) + "</div>" +
+                    "</div>" +
+                    "<div class=\"cred-actions\">" +
+                        "<button type=\"button\" class=\"button secondary mini\" onclick=\"probeSingleCredential('" + escapeHTML(authIdx) + "', this)\">" + ICONS.probe + "<span>Probe</span></button>" +
+                        "<button type=\"button\" class=\"button secondary mini\" onclick=\"openSamplesModal('" + escapeHTML(authIdx) + "', '" + escapeHTML(credDisplayName) + "')\">" + ICONS.chart + "<span>Samples</span></button>" +
                     "</div>";
 
                 container.appendChild(card);

@@ -6,20 +6,7 @@ const templateScriptConfig = `        let originalConfigState = null;
             if (isAuthBlocked) return;
             try {
                 dynamicConfig = await apiFetch(CONFIG_PATH);
-                if (!userSelectedModelGroup && dynamicConfig && dynamicConfig.antigravity_model_group) {
-                    const select = document.getElementById("modelGroupSelect");
-                    if (select && select.value !== dynamicConfig.antigravity_model_group) {
-                        select.value = dynamicConfig.antigravity_model_group;
-                        updateCustomSelectDisplay();
-                        const menu = document.getElementById("customSelectMenu");
-                        if (menu) {
-                            menu.querySelectorAll(".custom-select-option").forEach(opt => {
-                                const isSelected = opt.getAttribute("data-value") === dynamicConfig.antigravity_model_group;
-                                opt.classList.toggle("selected", isSelected);
-                            });
-                        }
-                    }
-                }
+                syncModelGroupSelect(dynamicConfig && dynamicConfig.antigravity_model_group);
                 renderDynamicConfigForm(dynamicConfig);
                 renderScheduleStatus();
             } catch (err) {
@@ -56,12 +43,18 @@ const templateScriptConfig = `        let originalConfigState = null;
         function updateSaveButtonState() {
             var btn = document.getElementById("btnSaveConfig");
             if (!btn) return;
-            if (!originalConfigState) {
-                btn.disabled = true;
-                return;
+            var dirty = Boolean(originalConfigState) && getDynamicConfigFormData() !== originalConfigState;
+            btn.disabled = !dirty;
+            var badge = document.getElementById("configStateBadge");
+            if (badge && originalConfigState) {
+                badge.innerHTML = dirty
+                    ? "<span class=\"status-dot warning\"></span><span>Unsaved changes</span>"
+                    : "<span class=\"status-dot\"></span><span>In effect</span>";
             }
-            var current = getDynamicConfigFormData();
-            btn.disabled = current === originalConfigState;
+        }
+
+        function autoApplyLabel(enabled) {
+            return enabled ? "Enabled" : "Disabled";
         }
 
         function renderDynamicConfigForm(cfg) {
@@ -71,15 +64,19 @@ const templateScriptConfig = `        let originalConfigState = null;
             var autoText = document.getElementById("cfgAutoApplyStatusText");
             if (autoApply) {
                 autoApply.checked = Boolean(cfg.auto_apply);
-                if (autoText) autoText.textContent = cfg.auto_apply ? (currentLang === "zh-CN" ? "已开启" : "Enabled") : (currentLang === "zh-CN" ? "已关闭" : "Disabled");
+                if (autoText) autoText.textContent = autoApplyLabel(cfg.auto_apply);
             }
 
             var intervalSelect = document.getElementById("cfgIntervalSelect");
             var intervalCustom = document.getElementById("cfgIntervalCustom");
             var intervalVal = cfg.interval || "15m";
+            // The runtime reports Go durations ("15m0s"); match them to the presets.
+            var preset = ["5m", "15m", "30m", "1h"].filter(function(option) {
+                return parseGoDurationMillis(option) === parseGoDurationMillis(intervalVal);
+            })[0];
             if (intervalSelect) {
-                if (["5m", "15m", "30m", "1h"].indexOf(intervalVal) >= 0) {
-                    intervalSelect.value = intervalVal;
+                if (preset) {
+                    intervalSelect.value = preset;
                     if (intervalCustom) intervalCustom.hidden = true;
                 } else {
                     intervalSelect.value = "custom";
@@ -88,13 +85,11 @@ const templateScriptConfig = `        let originalConfigState = null;
                         intervalCustom.hidden = false;
                     }
                 }
-                updateCustomIntervalDisplay();
             }
 
             var modelGroup = document.getElementById("cfgModelGroup");
             if (modelGroup) {
                 modelGroup.value = cfg.antigravity_model_group || "gemini";
-                updateCustomCfgModelDisplay();
             }
 
             var windowEnabled = document.getElementById("cfgWindowEnabled");
@@ -104,7 +99,7 @@ const templateScriptConfig = `        let originalConfigState = null;
             var sched = cfg.schedule || {};
             if (windowEnabled) {
                 windowEnabled.checked = Boolean(sched.window_enabled);
-                if (windowInputs) windowInputs.style.opacity = sched.window_enabled ? "1" : "0.5";
+                if (windowInputs) windowInputs.classList.toggle("inactive", !sched.window_enabled);
             }
             if (windowStart) windowStart.value = sched.window_start || "09:00";
             if (windowEnd) windowEnd.value = sched.window_end || "23:00";
@@ -151,7 +146,7 @@ const templateScriptConfig = `        let originalConfigState = null;
             var chk = document.getElementById("cfgWindowEnabled");
             var inputs = document.getElementById("cfgWindowInputs");
             if (chk && inputs) {
-                inputs.style.opacity = chk.checked ? "1" : "0.5";
+                inputs.classList.toggle("inactive", !chk.checked);
             }
             updateSaveButtonState();
         }
@@ -160,7 +155,7 @@ const templateScriptConfig = `        let originalConfigState = null;
             if (e.target && e.target.id === "cfgAutoApply") {
                 var autoText = document.getElementById("cfgAutoApplyStatusText");
                 if (autoText) {
-                    autoText.textContent = e.target.checked ? (currentLang === "zh-CN" ? "已开启" : "Enabled") : (currentLang === "zh-CN" ? "已关闭" : "Disabled");
+                    autoText.textContent = autoApplyLabel(e.target.checked);
                 }
             }
             if (e.target && e.target.closest("#panelConfig")) {
@@ -209,7 +204,7 @@ const templateScriptConfig = `        let originalConfigState = null;
                     if (intervalSelect.value === "custom") {
                         interval = (intervalCustom && intervalCustom.value.trim()) || "";
 						if (!interval || parseGoDurationMillis(interval) < 60000) {
-                            showToast(t("valErrInterval"), "error");
+                            showToast("Invalid custom interval (use a Go duration of at least 1m, e.g. 15m, 1h)", "error");
                             if (intervalCustom) intervalCustom.focus();
                             updateSaveButtonState();
                             return;
@@ -226,7 +221,7 @@ const templateScriptConfig = `        let originalConfigState = null;
                 if (windowEnabled) {
                     var timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
                     if (!timeRegex.test(windowStart) || !timeRegex.test(windowEnd)) {
-                        showToast(t("valErrWindow"), "error");
+                        showToast("Invalid window time (use HH:mm, e.g. 09:00, 23:00)", "error");
                         updateSaveButtonState();
                         return;
                     }
@@ -234,14 +229,14 @@ const templateScriptConfig = `        let originalConfigState = null;
 
 				var maxConcurrency = parseStrictInteger((document.getElementById("cfgMaxConcurrency") && document.getElementById("cfgMaxConcurrency").value) || "6");
                 if (isNaN(maxConcurrency) || maxConcurrency < 1 || maxConcurrency > 32) {
-                    showToast(t("valErrConcurrency"), "error");
+                    showToast("Max concurrency out of range (1 - 32)", "error");
                     updateSaveButtonState();
                     return;
                 }
 
 				var minChange = parseStrictInteger((document.getElementById("cfgMinChange") && document.getElementById("cfgMinChange").value) || "1");
                 if (isNaN(minChange) || minChange < 0 || minChange > 100) {
-                    showToast(t("valErrMinChange"), "error");
+                    showToast("Priority change threshold out of range (0 - 100)", "error");
                     updateSaveButtonState();
                     return;
                 }
@@ -249,21 +244,21 @@ const templateScriptConfig = `        let originalConfigState = null;
                 var urgencyTolRaw = (document.getElementById("cfgUrgencyTolerance") && document.getElementById("cfgUrgencyTolerance").value) || "0.05";
 				var urgencyTol = Number(urgencyTolRaw);
 				if (urgencyTolRaw.trim() === "" || isNaN(urgencyTol) || urgencyTol < 0.0 || urgencyTol > 0.50) {
-                    showToast(t("valErrUrgencyTol"), "error");
+                    showToast("Urgency tolerance out of range (0.00 - 0.50)", "error");
                     updateSaveButtonState();
                     return;
                 }
 
 				var sampleCapacity = parseStrictInteger((document.getElementById("cfgSampleCapacity") && document.getElementById("cfgSampleCapacity").value) || "6");
                 if (isNaN(sampleCapacity) || sampleCapacity < 2 || sampleCapacity > 30) {
-                    showToast(t("valErrSampleCapacity"), "error");
+                    showToast("Sample capacity out of range (2 - 30)", "error");
                     updateSaveButtonState();
                     return;
                 }
 
 				var cooldownMin = parseStrictInteger((document.getElementById("cfgCooldownMinutes") && document.getElementById("cfgCooldownMinutes").value) || "5");
                 if (isNaN(cooldownMin) || cooldownMin < 1 || cooldownMin > 1440) {
-                    showToast(t("valErrCooldown"), "error");
+                    showToast("429 cooldown minutes out of range (1 - 1440)", "error");
                     updateSaveButtonState();
                     return;
                 }
@@ -272,12 +267,12 @@ const templateScriptConfig = `        let originalConfigState = null;
 				var normalStart = parseStrictInteger((document.getElementById("cfgNormalStartPriority") && document.getElementById("cfgNormalStartPriority").value) || "100");
 
                 if (isNaN(boostStart) || boostStart < 1 || boostStart > 999 || isNaN(normalStart) || normalStart < 1 || normalStart > 999) {
-                    showToast(t("valErrPriorityRange"), "error");
+                    showToast("Priority out of range (1 - 999)", "error");
                     updateSaveButtonState();
                     return;
                 }
                 if (normalStart > boostStart) {
-                    showToast(t("valErrPriorityOrder"), "error");
+                    showToast("Normal start priority cannot be greater than the boost start priority", "error");
                     updateSaveButtonState();
                     return;
                 }
@@ -309,7 +304,7 @@ const templateScriptConfig = `        let originalConfigState = null;
                 renderDynamicConfigForm(dynamicConfig);
                 await fetchScheduleConfig();
                 await refreshDashboard();
-                showToast(t("configSaveSuccess"), "success");
+                showToast("Configuration saved and applied", "success");
             } catch (err) {
                 showToast(err.message, "error");
                 updateSaveButtonState();
@@ -318,10 +313,10 @@ const templateScriptConfig = `        let originalConfigState = null;
 
         async function resetDynamicConfigToDefaults() {
             var confirmed = await showThemedConfirm({
-                title: t("confirmResetConfigTitle"),
-                message: t("confirmResetConfigMsg"),
-                confirmText: currentLang === "zh-CN" ? "确认恢复默认" : "Reset to Defaults",
-                cancelText: currentLang === "zh-CN" ? "取消" : "Cancel",
+                title: "Reset configuration to defaults?",
+                message: "Every runtime setting returns to its recommended default and is saved immediately.",
+                confirmText: "Reset to defaults",
+                cancelText: "Cancel",
                 isDanger: false
             });
             if (!confirmed) return;

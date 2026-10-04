@@ -8,7 +8,7 @@ const templateScriptHistoryDetails = `        function showHistoryDetails(index)
             var isAutoSchedule = entry.kind === "auto_apply" || entry.trigger === "auto_apply";
             if (entry.kind === "probe" || isAutoSchedule) {
                 if (!entry.probe_round_id) {
-                    showToast(currentLang === "zh-CN" ? "该探测记录没有可追溯的新样本" : "This probe record has no attributable new samples", "info");
+                    showToast("This probe record has no attributable new samples", "info");
                     return;
                 }
                 const probeModelGroups = ["gemini", "claude_gpt"];
@@ -42,14 +42,14 @@ const templateScriptHistoryDetails = `        function showHistoryDetails(index)
 						showModal("probe-history", detailResult, true);
 					}
                 }).catch(function(err) {
-                    showToast(err.message || (currentLang === "zh-CN" ? "读取探测明细失败" : "Failed to load probe details"), "error");
+                    showToast(err.message || "Failed to load probe details", "error");
                 });
                 return;
             }
 
             var snap = entry.snapshot;
             if (!snap || (!snap.items && !snap.changes)) {
-                showToast(currentLang === "zh-CN" ? "该记录无详细快照数据" : "No snapshot data for this entry", "info");
+                showToast("No snapshot data for this entry", "info");
                 return;
             }
 

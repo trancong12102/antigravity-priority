@@ -15,19 +15,13 @@ const templateScriptLiveUI = `        function updateAllCountdowns() {
                 }
             });
 
-            var isAutoApplyEnabled = false;
-            if (dynamicConfig && dynamicConfig.auto_apply !== undefined) {
-                isAutoApplyEnabled = Boolean(dynamicConfig.auto_apply);
-            } else if (latestDiagnostics && latestDiagnostics.management_api && latestDiagnostics.management_api.auto_apply !== undefined) {
-                isAutoApplyEnabled = Boolean(latestDiagnostics.management_api.auto_apply);
-            }
             var isPaused = scheduleConfig ? Boolean(scheduleConfig.paused) : (latestDiagnostics && latestDiagnostics.scheduler && Boolean(latestDiagnostics.scheduler.paused));
             var isSleeping = false;
             if (scheduleConfig && scheduleConfig.window_enabled && scheduleConfig.window_start && scheduleConfig.window_end) {
                 isSleeping = !isCurrentTimeInScheduleWindow(scheduleConfig.window_start, scheduleConfig.window_end);
             }
 
-            if (isAutoApplyEnabled && !isPaused && !isSleeping) {
+            if (isAutoApplyEnabled() && !isPaused && !isSleeping) {
                 document.querySelectorAll("[data-scheduler-countdown]").forEach(function(el) {
                     var t = el.getAttribute("data-scheduler-countdown");
                     if (t) el.textContent = formatCountdown(t);
@@ -52,14 +46,16 @@ const templateScriptLiveUI = `        function updateAllCountdowns() {
         function showToast(msg, type) {
             var root = document.getElementById("toastRoot");
             if (!root) return;
+            var kind = type === "error" ? "error" : type === "info" ? "info" : "success";
             var toast = document.createElement("div");
-            toast.className = "toast " + (type === "error" ? "toast-error" : type === "info" ? "toast-info" : "toast-success");
-            toast.textContent = msg;
+            toast.className = "toast " + kind + " enter";
+            toast.innerHTML = (kind === "error" ? ICONS.warning : kind === "info" ? ICONS.info : ICONS.check) + "<span>" + escapeHTML(msg) + "</span>";
             root.appendChild(toast);
+            requestAnimationFrame(function() { toast.classList.remove("enter"); });
             setTimeout(function() {
-                toast.classList.add("toast-exit");
-                setTimeout(function() { toast.remove(); }, 200);
-            }, 2800);
+                toast.classList.add("exit");
+                setTimeout(function() { toast.remove(); }, 190);
+            }, 3600);
         }
 
         function escapeHTML(str) {
@@ -84,11 +80,7 @@ const templateScriptLiveUI = `        function updateAllCountdowns() {
                 okBtn.textContent = opts.confirmText || "OK";
                 cancelBtn.textContent = opts.cancelText || "Cancel";
 
-                if (opts.isDanger) {
-                    okBtn.className = "btn-danger";
-                } else {
-                    okBtn.className = "btn-primary";
-                }
+                okBtn.className = "button compact " + (opts.isDanger ? "danger-solid" : "primary");
 
                 function cleanup(result) {
                     modal.hidden = true;

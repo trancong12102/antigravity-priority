@@ -4,11 +4,12 @@ const templateScriptHistory = `        function formatHistoryKind(entry) {
 			var kind = entry && entry.kind ? entry.kind : "";
 			var trigger = entry && entry.trigger ? entry.trigger : "";
 			var k = kind.toLowerCase();
-			if (k === "auto_apply" || trigger.toLowerCase() === "auto_apply") return currentLang === "zh-CN" ? "自动调度" : "AUTO SCHEDULE";
-			if (k === "apply" || k === "manual_apply") return currentLang === "zh-CN" ? "立即写回" : "APPLY";
-            if (k === "probe") return currentLang === "zh-CN" ? "配额探测" : "PROBE";
-            if (k === "reset") return currentLang === "zh-CN" ? "重置优先级" : "RESET";
-            return (kind || "RUN").toUpperCase();
+            if (k === "auto_apply" || trigger.toLowerCase() === "auto_apply") return "Auto schedule";
+            if (k === "apply" || k === "manual_apply") return "Apply";
+            if (k === "probe") return "Probe";
+            if (k === "reset") return "Reset";
+            var label = (kind || "run").replace(/_/g, " ");
+            return label.charAt(0).toUpperCase() + label.slice(1);
         }
 
         function renderHistory() {
@@ -16,39 +17,40 @@ const templateScriptHistory = `        function formatHistoryKind(entry) {
             if (!list) return;
 
             const entries = (latestDiagnostics && latestDiagnostics.run_history) || [];
+            const countBadge = document.getElementById("historyCountBadge");
+            if (countBadge) {
+                countBadge.innerHTML = "<span class=\"status-dot" + (entries.length ? "" : " neutral") + "\"></span><span>" +
+                    (entries.length ? entries.length + (entries.length === 1 ? " run" : " runs") + " recorded" : "No runs yet") + "</span>";
+            }
             list.innerHTML = "";
             if (entries.length === 0) {
-                list.innerHTML = "<div class=\"empty-state\">" + t("noHistory") + "</div>";
+                list.innerHTML = "<div class=\"empty-state\">No execution history yet</div>";
                 return;
             }
 
             entries.forEach(function(entry, idx) {
                 const item = document.createElement("div");
                 item.className = "history-item";
-                const dateStr = entry.at ? new Date(entry.at).toLocaleString(currentLang === "zh-CN" ? "zh-CN" : "en-US") : "-";
+                const dateStr = formatDateTime(entry.at);
 				const kindText = formatHistoryKind(entry);
                 const msg = entry.message || "";
 				const isAutoSchedule = entry.kind === "auto_apply" || entry.trigger === "auto_apply";
 				const hasSnapshot = entry.kind === "probe" ? Boolean(entry.probe_round_id) : (isAutoSchedule ? Boolean(entry.probe_round_id || (entry.snapshot && (entry.snapshot.items || entry.snapshot.changes))) : (entry.snapshot && (entry.snapshot.items || entry.snapshot.changes)));
 
-                const succText = (currentLang === "zh-CN" ? "成功: " : "Succeeded: ") + (entry.succeeded || 0);
-                const failText = (currentLang === "zh-CN" ? "失败: " : "Failed: ") + (entry.failed || 0);
-                const skipText = (currentLang === "zh-CN" ? "跳过: " : "Skipped: ") + (entry.skipped || 0);
-
                 item.innerHTML =
                     "<div class=\"history-head\">" +
-                        "<div style=\"display:flex; align-items:center; gap:8px;\">" +
-                            "<span class=\"badge badge-subtle\">" + escapeHTML(kindText) + "</span>" +
-                            "<span style=\"font-size:13px; font-weight:600;\">" + escapeHTML(dateStr) + "</span>" +
+                        "<div class=\"history-when\">" +
+                            "<span class=\"badge\">" + escapeHTML(kindText) + "</span>" +
+                            "<strong>" + escapeHTML(dateStr) + "</strong>" +
                         "</div>" +
                         "<div class=\"history-stats\">" +
-                            "<span class=\"badge badge-success\">" + succText + "</span>" +
-                            "<span class=\"badge badge-danger\">" + failText + "</span>" +
-                            "<span class=\"badge badge-subtle\">" + skipText + "</span>" +
-                            (hasSnapshot ? "<button type=\"button\" class=\"btn-secondary\" style=\"min-height:24px; height:24px; padding:0 8px; font-size:11px;\" onclick=\"showHistoryDetails(" + idx + ")\">" + t("viewDetails") + "</button>" : "") +
+                            "<span class=\"badge badge-success\">Succeeded " + (entry.succeeded || 0) + "</span>" +
+                            "<span class=\"badge" + (entry.failed ? " badge-danger" : " badge-subtle") + "\">Failed " + (entry.failed || 0) + "</span>" +
+                            "<span class=\"badge badge-subtle\">Skipped " + (entry.skipped || 0) + "</span>" +
+                            (hasSnapshot ? "<button type=\"button\" class=\"button secondary mini\" onclick=\"showHistoryDetails(" + idx + ")\">" + ICONS.search + "<span>Details</span></button>" : "") +
                         "</div>" +
                     "</div>" +
-                    (msg ? "<div style=\"font-size:11.5px; color:var(--text-muted); font-family:monospace; line-height:1.3;\">" + escapeHTML(msg) + "</div>" : "");
+                    (msg ? "<div class=\"history-message\">" + escapeHTML(msg) + "</div>" : "");
                 list.appendChild(item);
             });
         }

@@ -12,18 +12,18 @@ const templateScriptProbeSchedule = `        async function triggerProbe() {
                 var group = groupSelect ? groupSelect.value : "gemini";
                 var path = RUN_PATH + "?mode=probe&antigravity_model_group=" + encodeURIComponent(group);
                 await apiFetch(path, { method: "POST" });
-                showToast(t("probeSuccess"), "success");
+                showToast("Quota probe complete", "success");
                 await refreshDashboard();
             } catch (err) {
                 showToast(err.message, "error");
             }
 
             var remaining = 10;
-            var label = btn.querySelector("[data-i18n='btnProbe']") || btn.querySelector("span");
+            var label = btn.querySelector(".label-long");
             var origText = label ? label.textContent : "";
             probeCooldownTimer = setInterval(function() {
                 remaining--;
-                if (label) label.textContent = t("probeCooldown") + " (" + remaining + "s)";
+                if (label) label.textContent = "Cooling down (" + remaining + "s)";
                 if (remaining <= 0) {
                     clearInterval(probeCooldownTimer);
                     probeCooldownTimer = null;
@@ -42,31 +42,23 @@ const templateScriptProbeSchedule = `        async function triggerProbe() {
             } catch (_) {}
         }
 
-        function renderScheduleStatus() {
+        function setScheduleBadge(tone, text, title) {
             var badge = document.getElementById("scheduleStatusBadge");
-            var textEl = document.getElementById("scheduleStatusText");
-            if (!badge || !textEl) return;
+            if (!badge) return;
+            badge.title = title;
+            badge.innerHTML = "<span class=\"status-dot " + tone + "\"></span><span id=\"scheduleStatusText\">" + escapeHTML(text) + "</span>";
+        }
 
-            var isAutoApplyEnabled = false;
-            if (dynamicConfig && dynamicConfig.auto_apply !== undefined) {
-                isAutoApplyEnabled = Boolean(dynamicConfig.auto_apply);
-            } else if (latestDiagnostics && latestDiagnostics.management_api && latestDiagnostics.management_api.auto_apply !== undefined) {
-                isAutoApplyEnabled = Boolean(latestDiagnostics.management_api.auto_apply);
-            }
-
-            if (!isAutoApplyEnabled) {
-                badge.className = "schedule-status paused";
-                badge.title = currentLang === "zh-CN" ? "自动定时调度已关闭，点击前往配置中心开启" : "Auto-scheduling disabled. Click to open Config Center.";
-                badge.innerHTML = "⚪ <span id=\"scheduleStatusText\">" + t("scheduleDisabled") + "</span>";
+        function renderScheduleStatus() {
+            if (!isAutoApplyEnabled()) {
+                setScheduleBadge("neutral", "Disabled", "Auto scheduling is off. Click to open Configuration.");
                 return;
             }
 
             if (!scheduleConfig) return;
 
             if (scheduleConfig.paused) {
-                badge.className = "schedule-status paused";
-                badge.title = currentLang === "zh-CN" ? "点击恢复自动调度" : "Click to resume";
-                badge.innerHTML = "⏸ <span id=\"scheduleStatusText\">" + t("schedulePaused") + "</span>";
+                setScheduleBadge("warning", "Paused", "Click to resume auto scheduling");
                 return;
             }
 
@@ -76,9 +68,7 @@ const templateScriptProbeSchedule = `        async function triggerProbe() {
             }
 
             if (scheduleConfig.window_enabled && !windowActive) {
-                badge.className = "schedule-status sleeping";
-                badge.title = currentLang === "zh-CN" ? "当前时间不在生效时段内" : "Outside active schedule window";
-                badge.innerHTML = "🌙 <span id=\"scheduleStatusText\">" + t("scheduleSleeping") + "</span>";
+                setScheduleBadge("boost", "Sleeping (outside window)", "The current time is outside the active schedule window");
                 return;
             }
 
@@ -86,22 +76,13 @@ const templateScriptProbeSchedule = `        async function triggerProbe() {
             if (scheduleConfig.window_enabled && scheduleConfig.window_start && scheduleConfig.window_end) {
                 windowStr = " (" + scheduleConfig.window_start + "-" + scheduleConfig.window_end + ")";
             }
-            badge.className = "schedule-status active";
-            badge.title = currentLang === "zh-CN" ? "点击暂停自动调度" : "Click to pause";
-            badge.innerHTML = "🟢 <span id=\"scheduleStatusText\">" + t("scheduleActive") + windowStr + "</span>";
+            setScheduleBadge("", "Running" + windowStr, "Click to pause auto scheduling");
         }
 
         async function toggleSchedulePause() {
-            var isAutoApplyEnabled = false;
-            if (dynamicConfig && dynamicConfig.auto_apply !== undefined) {
-                isAutoApplyEnabled = Boolean(dynamicConfig.auto_apply);
-            } else if (latestDiagnostics && latestDiagnostics.management_api && latestDiagnostics.management_api.auto_apply !== undefined) {
-                isAutoApplyEnabled = Boolean(latestDiagnostics.management_api.auto_apply);
-            }
-
-            if (!isAutoApplyEnabled) {
+            if (!isAutoApplyEnabled()) {
                 switchTab("config");
-                showToast(currentLang === "zh-CN" ? "请在配置中心开启“自动定时调度”开关" : "Please enable 'Auto Periodic Scheduling' in Config Center", "info");
+                showToast("Turn on \"Auto periodic scheduling\" to start the scheduler", "info");
                 return;
             }
 
@@ -125,7 +106,7 @@ const templateScriptProbeSchedule = `        async function triggerProbe() {
                 renderScheduleStatus();
                 renderDashboard();
                 renderDiagnostics();
-                showToast(scheduleConfig.paused ? t("schedulePaused") : t("scheduleActive"), "info");
+                showToast(scheduleConfig.paused ? "Auto schedule paused" : "Auto schedule running", "info");
             } catch (err) {
                 showToast(err.message, "error");
             }

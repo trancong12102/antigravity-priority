@@ -3,18 +3,17 @@ package management
 const overviewSamplesMarkup = `
     <!-- Quota Samples History Modal -->
     <div id="samplesModal" class="modal-backdrop" hidden>
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="samplesModalTitle" style="max-width: 620px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:18px;">📊</span>
-                    <h2 id="samplesModalTitle" style="margin:0; font-size:16px;">自适应时序采样明细</h2>
+        <div class="modal medium" role="dialog" aria-modal="true" aria-labelledby="samplesModalTitle">
+            <div class="modal-head">
+                <div>
+                    <h2 id="samplesModalTitle">Adaptive quota samples</h2>
+                    <p id="samplesModalSubtitle" class="mono"></p>
                 </div>
-                <button type="button" class="btn-secondary" onclick="closeSamplesModal()" style="min-height:28px; padding:3px 8px;">✕</button>
+                <button type="button" class="icon-button" onclick="closeSamplesModal()" aria-label="Close">` + iconClose + `</button>
             </div>
-            <div id="samplesModalSubtitle" style="font-size:12px; color:var(--text-muted); font-family:monospace;"></div>
-            <div id="samplesModalBody" class="modal-body" style="max-height:360px; overflow-y:auto; padding:4px 0;"></div>
-            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
-                <button type="button" class="btn-secondary" onclick="closeSamplesModal()" data-i18n="btnClose">关闭</button>
+            <div id="samplesModalBody" class="modal-body"></div>
+            <div class="modal-foot">
+                <button type="button" class="button secondary compact" onclick="closeSamplesModal()">Close</button>
             </div>
         </div>
     </div>
@@ -27,9 +26,9 @@ const templateScriptOverviewSamples = `        async function openSamplesModal(a
             const body = document.getElementById("samplesModalBody");
             if (!modal || !body) return;
 
-            title.textContent = (email || "Credential") + " - " + t("samplesModalTitle");
-            sub.textContent = email ? "Email: " + email : "";
-            body.innerHTML = "<div class=\"empty-state\">" + t("loading") + "</div>";
+            title.textContent = "Adaptive quota samples";
+            sub.textContent = email || "";
+            body.innerHTML = "<div class=\"empty-state\">Loading samples…</div>";
             modal.hidden = false;
 
             try {
@@ -51,55 +50,46 @@ const templateScriptOverviewSamples = `        async function openSamplesModal(a
                 const groupLabel = selectedGroup === "claude_gpt" ? "Claude/GPT" : "Gemini";
 
                 if (samples.length === 0) {
-                    body.innerHTML = "<div class=\"empty-state\">" + t("noSamples") + "</div>";
+                    body.innerHTML = "<div class=\"empty-state\">No quota samples recorded yet</div>";
                     return;
                 }
 
                 function renderMiniMeter(val) {
-                    if (val === undefined || val === null || val === "") return "<span style=\"color:var(--text-muted);\">-</span>";
+                    if (val === undefined || val === null || val === "") return "<span class=\"muted\">-</span>";
                     const parsed = Number(val);
-                    if (!Number.isFinite(parsed)) return "<span style=\"color:var(--text-muted);\">-</span>";
+                    if (!Number.isFinite(parsed)) return "<span class=\"muted\">-</span>";
                     const num = Math.max(0, Math.min(100, Math.trunc(parsed)));
-                    let fillClass = "meter-fill-healthy";
-                    if (num <= 10) fillClass = "meter-fill-danger";
-                    else if (num <= 30) fillClass = "meter-fill-warning";
-
-                    return "<div style=\"display:flex; align-items:center; gap:8px; width:100%; min-width:85px; max-width:140px;\">" +
-                        "<div style=\"flex:1; height:7px; background:var(--meter-track-bg); border:1px solid var(--meter-track-border); border-radius:999px; overflow:hidden;\">" +
-                            "<div class=\"meter-fill " + fillClass + "\" style=\"width:" + num + "%; height:100%; border-radius:999px;\"></div>" +
-                        "</div>" +
-                        "<strong style=\"font-size:11px; font-family:monospace; min-width:32px; text-align:right;\">" + num + "%</strong>" +
+                    return "<div class=\"mini-meter\">" +
+                        "<div class=\"meter-track\"><div class=\"meter-fill " + quotaFillClass(num) + "\" style=\"width:" + num + "%\"></div></div>" +
+                        "<strong>" + num + "%</strong>" +
                     "</div>";
                 }
 
                 let html = "<table class=\"sample-table\">" +
                     "<thead><tr>" +
-                        "<th style=\"width:36px; text-align:center;\">#</th>" +
-                        "<th style=\"width:150px;\">" + t("colObservedAt") + "</th>" +
-                        "<th>" + t("shortWindow") + "</th>" +
-                        "<th>" + t("longWindow") + "</th>" +
+                        "<th>#</th>" +
+                        "<th>Observed at</th>" +
+                        "<th>5h window</th>" +
+                        "<th>7d window</th>" +
                     "</tr></thead>";
 
                 for (let i = 0; i < samples.length; i++) {
                     const sample = samples[i] || {};
-                    const timeRaw = sample.observed_at;
-                    const timeStr = timeRaw ? new Date(timeRaw).toLocaleString(currentLang === "zh-CN" ? "zh-CN" : "en-US") : "-";
-
                     html += "<tbody class=\"sample-group\">" +
                         "<tr>" +
-                            "<td style=\"font-weight:700; text-align:center; border-bottom:1px solid var(--border-color);\">" + (i + 1) + "</td>" +
-                            "<td style=\"border-bottom:1px solid var(--border-color); font-size:12px; color:var(--text-secondary); font-family:monospace;\">" + escapeHTML(timeStr) + "</td>" +
-                            "<td style=\"border-bottom:1px solid var(--border-color); padding:6px 10px;\">" + renderMiniMeter(sample.short_window_rem) + "</td>" +
-                            "<td style=\"border-bottom:1px solid var(--border-color); padding:6px 10px;\">" + renderMiniMeter(sample.long_window_rem) + "</td>" +
+                            "<td class=\"sample-index\">" + (i + 1) + "</td>" +
+                            "<td class=\"sample-time\">" + escapeHTML(formatDateTime(sample.observed_at)) + "</td>" +
+                            "<td>" + renderMiniMeter(sample.short_window_rem) + "</td>" +
+                            "<td>" + renderMiniMeter(sample.long_window_rem) + "</td>" +
                         "</tr>" +
                     "</tbody>";
                 }
 
                 html += "</table>";
                 body.innerHTML = html;
-                sub.textContent = (email ? "Email: " + email : "") + " · " + groupLabel;
+                sub.textContent = (email ? email + " · " : "") + groupLabel;
             } catch (err) {
-                body.innerHTML = "<div class=\"empty-state\" style=\"color:var(--accent-red-text);\">" + escapeHTML(err.message) + "</div>";
+                body.innerHTML = "<div class=\"empty-state error\">" + escapeHTML(err.message) + "</div>";
             }
         }
 

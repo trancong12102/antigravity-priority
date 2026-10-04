@@ -1,6 +1,8 @@
 package management
 
-const templateScriptModals = `        function historyIdentity(value) {
+const templateScriptModals = `        const MANUAL_APPLY_RECHECK = "Confirm to fetch fresh quota, recalculate, and apply the latest target";
+
+        function historyIdentity(value) {
             var email = value && value.email ? String(value.email).trim() : "";
             if (email) return "email:" + email.toLowerCase();
             var authIndex = value && value.auth_index ? String(value.auth_index).trim() : "";
@@ -28,8 +30,8 @@ const templateScriptModals = `        function historyIdentity(value) {
 
         function historyPriorityValue(target) {
             if (!target) return "";
-            if (target.disabled) return currentLang === "zh-CN" ? "[已禁用]" : "[Disabled]";
-            if (target.priority_missing) return t("unsetPriority");
+            if (target.disabled) return "[Disabled]";
+            if (target.priority_missing) return "[Unset]";
             return target.priority !== undefined && target.priority !== null ? String(target.priority) : "";
         }
 
@@ -73,17 +75,17 @@ const templateScriptModals = `        function historyIdentity(value) {
             });
             list.innerHTML = "";
             if (rowKeys.length === 0) {
-                list.innerHTML = "<div class=\"empty-state\">" + (currentLang === "zh-CN" ? "本轮没有额度或优先级变化" : "No quota or priority changes in this run") + "</div>";
+                list.innerHTML = "<div class=\"empty-state\">" + "No quota or priority changes in this run" + "</div>";
                 return {quotaRecordCount: quotaRecordCount, rowCount: 0};
             }
 
             var tableClass = includePriority ? "history-comparison-table" : "history-comparison-table history-comparison-quota-only";
             var html = "<div class=\"" + tableClass + "\">" +
                 "<div class=\"history-comparison-row history-comparison-header\">" +
-                    "<div>" + (currentLang === "zh-CN" ? "账号" : "Account") + "</div>" +
-                    "<div>" + (currentLang === "zh-CN" ? "本次探测 Gemini 额度" : "Gemini Quota This Probe") + "</div>" +
-                    "<div>" + (currentLang === "zh-CN" ? "本次探测 Claude/GPT 额度" : "Claude/GPT Quota This Probe") + "</div>" +
-                    (includePriority ? "<div>" + (currentLang === "zh-CN" ? "优先级变化" : "Priority Change") + "</div>" : "") +
+                    "<div>" + "Account" + "</div>" +
+                    "<div>" + "Gemini quota this probe" + "</div>" +
+                    "<div>" + "Claude/GPT quota this probe" + "</div>" +
+                    (includePriority ? "<div>" + "Priority change" + "</div>" : "") +
                 "</div>";
             rowKeys.forEach(function(key) {
                 var row = rows[key];
@@ -113,15 +115,13 @@ const templateScriptModals = `        function historyIdentity(value) {
 			if (modalPanel) modalPanel.classList.toggle("modal-history-comparison", isProbeHistory || isAutoHistory);
 
 			if (isProbeHistory || isAutoHistory) {
-				title.textContent = isAutoHistory
-					? (currentLang === "zh-CN" ? "自动调度明细" : "Automatic Schedule Details")
-					: (currentLang === "zh-CN" ? "配额探测明细" : "Quota Probe Details");
+				title.textContent = isAutoHistory ? "Automatic schedule details" : "Quota probe details";
                 btnApply.hidden = true;
                 const groups = result && result.groups && typeof result.groups === "object" ? result.groups : {};
 				const historyChanges = isAutoHistory && result && Array.isArray(result.changes) ? result.changes : [];
 				const comparison = renderHistoryComparison(list, {groups: groups, changes: historyChanges}, isAutoHistory);
-				const summaryParts = [(currentLang === "zh-CN" ? "本轮新增额度样本: " : "New quota samples in this round: ") + comparison.quotaRecordCount];
-				if (isAutoHistory && historyChanges.length > 0) summaryParts.push((currentLang === "zh-CN" ? "优先级变化: " : "Priority changes: ") + historyChanges.length);
+				const summaryParts = ["New quota samples in this round: " + comparison.quotaRecordCount];
+				if (isAutoHistory && historyChanges.length > 0) summaryParts.push("Priority changes: " + historyChanges.length);
 				summary.textContent = summaryParts.join(" · ");
 				modal.hidden = false;
                 return;
@@ -131,42 +131,42 @@ const templateScriptModals = `        function historyIdentity(value) {
             const isProjectedPreview = isApplyConfirm && result.preview_mode === "projected";
 
             if (isApplyConfirm) {
-                title.textContent = t("confirmApplyTitle");
+                title.textContent = "Confirm immediate apply";
                 btnApply.hidden = false;
-                btnApply.textContent = t("btnConfirmApply");
+                btnApply.textContent = "Confirm apply";
                 btnApply.onclick = executeDirectApply;
                 summary.textContent = isProjectedPreview
-                    ? t("projectedApplyPreview") + ": " + changes.length + " · " + t("manualApplyRecheck")
-                    : t("pendingApplyPreview") + ": " + changes.length;
+                    ? "Current target preview: " + changes.length + " · " + MANUAL_APPLY_RECHECK
+                    : "Credentials to update: " + changes.length;
             } else {
-                title.textContent = currentLang === "zh-CN" ? "执行明细快照" : "Execution Details Snapshot";
+                title.textContent = "Execution details snapshot";
                 btnApply.hidden = true;
-                summary.textContent = (currentLang === "zh-CN" ? "成功: " : "Succeeded: ") + (result.succeeded || 0) + ", " +
-                    (currentLang === "zh-CN" ? "失败: " : "Failed: ") + (result.failed || 0) + ", " +
-                    (currentLang === "zh-CN" ? "跳过: " : "Skipped: ") + (result.skipped || 0);
+                summary.textContent = "Succeeded: " + (result.succeeded || 0) + ", " +
+                    "Failed: " + (result.failed || 0) + ", " +
+                    "Skipped: " + (result.skipped || 0);
             }
 
             list.innerHTML = "";
             if (changes.length === 0) {
-                list.innerHTML = "<div class=\"empty-state\">" + (isApplyConfirm ? t("manualApplyRecheck") : t("noChanges")) + "</div>";
+                list.innerHTML = "<div class=\"empty-state\">" + (isApplyConfirm ? MANUAL_APPLY_RECHECK : "No priority or status changes required") + "</div>";
             } else {
                 changes.forEach(c => {
                     const row = document.createElement("div");
                     row.className = "diff-card";
                     let fromP = "-";
                     if (c.current && c.current.priority !== undefined && c.current.priority !== null) {
-                        fromP = c.current.disabled ? (currentLang === "zh-CN" ? "[已禁用]" : "[Disabled]") : (c.current.priority_missing ? t("unsetPriority") : c.current.priority);
+                        fromP = c.current.disabled ? "[Disabled]" : (c.current.priority_missing ? "[Unset]" : c.current.priority);
                     } else if (c.priority_from !== undefined && c.priority_from !== null) {
-                        fromP = c.disabled_from ? (currentLang === "zh-CN" ? "[已禁用]" : "[Disabled]") : (c.priority_missing ? t("unsetPriority") : c.priority_from);
+                        fromP = c.disabled_from ? "[Disabled]" : (c.priority_missing ? "[Unset]" : c.priority_from);
                     }
 
                     let toP = "-";
                     if (c.target && c.target.priority !== undefined && c.target.priority !== null) {
-                        toP = c.target.disabled ? (currentLang === "zh-CN" ? "[已禁用]" : "[Disabled]") : (c.target.priority_missing ? t("unsetPriority") : c.target.priority);
+                        toP = c.target.disabled ? "[Disabled]" : (c.target.priority_missing ? "[Unset]" : c.target.priority);
                     } else if (c.priority_to !== undefined && c.priority_to !== null) {
-                        toP = c.disabled_to ? (currentLang === "zh-CN" ? "[已禁用]" : "[Disabled]") : (c.priority_missing_to ? t("unsetPriority") : c.priority_to);
+                        toP = c.disabled_to ? "[Disabled]" : (c.priority_missing_to ? "[Unset]" : c.priority_to);
                     } else if (c.priority !== undefined && c.priority !== null) {
-                        toP = (c.disabled || (c.target && c.target.disabled)) ? (currentLang === "zh-CN" ? "[已禁用]" : "[Disabled]") : c.priority;
+                        toP = (c.disabled || (c.target && c.target.disabled)) ? "[Disabled]" : c.priority;
                     }
 
                     const name = c.email || "Credential";
@@ -174,11 +174,11 @@ const templateScriptModals = `        function historyIdentity(value) {
                     const reasonText = formatReason(c.reason, isBoost, c.disabled_to || (c.target && c.target.disabled));
 
                     row.innerHTML = "<div>" +
-                        "<div style=\"font-weight:700; font-size:13px; display:flex; align-items:center; gap:6px;\">" +
+                        "<div class=\"diff-name\">" +
                             "<span>" + escapeHTML(name) + "</span>" +
-                            (isBoost ? "<span class=\"badge badge-boost\">🚀 Boost</span>" : "") +
+                            (isBoost ? "<span class=\"badge badge-boost\">Boost</span>" : "") +
                         "</div>" +
-                        "<div style=\"font-size:12px; color:var(--text-muted);\">" + escapeHTML(reasonText) + "</div>" +
+                        "<div class=\"diff-reason\">" + escapeHTML(reasonText) + "</div>" +
                     "</div>" +
                     "<div class=\"diff-value-box\">" +
                         "<span class=\"diff-from\">" + fromP + "</span>" +

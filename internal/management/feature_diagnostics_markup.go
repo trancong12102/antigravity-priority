@@ -3,119 +3,91 @@ package management
 // diagnosticsMarkup contains the HTML owned by the Diagnostics feature asset.
 const diagnosticsMarkup = `
         <section id="panelDiagnostics" hidden>
-            <div class="diag-scroll-container scroll-container">
-                <!-- Diagnostics Top Header -->
-                <div class="diag-top-bar">
-                    <h2 style="margin:0; font-size:15px; font-weight:700; color:var(--text-primary);" data-i18n="diagnosticsTitle">系统运行诊断与调度状态</h2>
-                    <button type="button" class="btn-secondary" style="min-height:30px; height:30px; padding:0 12px; font-size:12px;" onclick="copyDiagnosticsJSON()">
-                        📋 <span data-i18n="btnCopyDiagnostics">复制诊断 JSON</span>
-                    </button>
-                </div>
-
-                <!-- 3-Column KPI Grid -->
-                <div class="diag-kpi-grid">
-                    <!-- KPI 1: Scheduler Engine -->
-                    <div class="diag-kpi-card">
-                        <div class="diag-kpi-head">
-                            <span class="diag-kpi-title" data-i18n="diagKpiScheduler">⏰ 调度引擎</span>
-                            <span id="diagSchedBadge" class="badge badge-subtle">-</span>
-                        </div>
-                        <div id="diagSchedInterval" class="diag-kpi-value">-</div>
-                        <div id="diagSchedCountdown" class="diag-kpi-desc">-</div>
+            <div class="command-wrap">
+                <div class="commandbar" aria-label="Diagnostics actions">
+                    <div class="command-state">
+                        <span class="command-label">Diagnostics</span>
+                        <span class="health-badge"><span class="status-dot neutral"></span><span>Secrets redacted</span></span>
                     </div>
-
-                    <!-- KPI 2: 429 Circuit Breakers -->
-                    <div class="diag-kpi-card">
-                        <div class="diag-kpi-head">
-                            <span class="diag-kpi-title" data-i18n="diagKpiCooldown">🛡️ 429 熔断监控</span>
-                            <span id="diagCooldownBadge" class="badge badge-success">正常</span>
-                        </div>
-                        <div id="diagCooldownCount" class="diag-kpi-value">0</div>
-                        <div id="diagCooldownSub" class="diag-kpi-desc" data-i18n="diagCooldownSubText">自动降权 -1 机制就绪</div>
-                    </div>
-
-                    <!-- KPI 3: Latest Apply Health -->
-                    <div class="diag-kpi-card">
-                        <div class="diag-kpi-head">
-                            <span class="diag-kpi-title" data-i18n="diagKpiLastApply">📊 最近写入体征</span>
-                            <span id="diagApplyBadge" class="badge badge-subtle">-</span>
-                        </div>
-                        <div id="diagApplyStats" class="diag-kpi-value">-</div>
-                        <div id="diagApplyTime" class="diag-kpi-desc">-</div>
+                    <div class="command-actions">
+                        <button type="button" class="icon-button" onclick="fetchDiagnostics()" aria-label="Reload diagnostics" title="Reload diagnostics">` + iconRefresh + `</button>
+                        <button type="button" class="button secondary compact" id="btnCopyDiagnostics" onclick="copyDiagnosticsJSON()" title="Copy diagnostics JSON">` + iconCopy + `<span class="label-long">Copy diagnostics JSON</span></button>
                     </div>
                 </div>
-
-                <!-- Section Card 1: Scheduling Details & Active Time Window -->
-                <div class="diag-card">
-                    <h3 class="diag-card-title">
-                        <span>⏰</span>
-                        <span data-i18n="diagSectionScheduler">调度运行详情与时间窗口</span>
-                    </h3>
-                    <div class="diag-detail-grid">
-                        <div class="diag-detail-item">
-                            <span class="diag-detail-label" data-i18n="diagSchedIntervalLabel">基础执行周期</span>
-                            <span id="diagSchedDetailInterval" class="diag-detail-val">-</span>
-                        </div>
-                        <div class="diag-detail-item">
-                            <span class="diag-detail-label" data-i18n="diagSchedWorkerLabel">后台 Worker 协程</span>
-                            <span id="diagSchedDetailWorker" class="diag-detail-val">-</span>
-                        </div>
-                        <div class="diag-detail-item">
-                            <span class="diag-detail-label" data-i18n="diagSchedLastRunLabel">上次自动调度</span>
-                            <span id="diagSchedDetailLastRun" class="diag-detail-val">-</span>
-                        </div>
-                        <div class="diag-detail-item">
-                            <span class="diag-detail-label" data-i18n="diagSchedNextRunLabel">下次调度预计时间</span>
-                            <span id="diagSchedDetailNextRun" class="diag-detail-val">-</span>
-                        </div>
+            </div>
+            <div class="editor">
+                <header class="editor-head">
+                    <div class="editor-title-wrap">
+                        <p class="editor-kicker">System diagnostics</p>
+                        <h1>Scheduler and health</h1>
+                        <p class="editor-subtitle">How the scheduler is running, which credentials sit in 429 cooldown, and what the last write to CPA did.</p>
                     </div>
-                    <div class="diag-window-box">
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:13px; font-weight:600;" data-i18n="diagWindowPolicyLabel">调度时段策略:</span>
-                                <span id="diagSchedDetailWindowText" style="font-size:13px; color:var(--text-secondary); font-family:monospace;">-</span>
-                            </div>
-                            <span id="diagSchedDetailWindowBadge" class="badge badge-subtle">-</span>
-                        </div>
-                    </div>
-                </div>
+                </header>
 
-                <!-- Section Card 2: 429 Rate Limit Cooldowns -->
-                <div class="diag-card">
-                    <h3 class="diag-card-title">
-                        <span>🛡️</span>
-                        <span data-i18n="diagSectionCooldown">429 熔断与冷却凭证监控</span>
-                    </h3>
-                    <div id="diagCooldownContent">
-                        <div class="diag-cooldown-empty">
-                            <span>✅</span>
-                            <span data-i18n="diagCooldownEmptyText">当前无处于 429 冷却中的凭证，所有账号运行正常</span>
-                        </div>
-                    </div>
-                </div>
+                <section class="stat-grid three diag-kpi-grid" aria-label="Diagnostics summary">
+                    <article class="stat-card">
+                        <div class="stat-head"><span>Scheduler engine</span><span id="diagSchedBadge" class="badge badge-subtle">-</span></div>
+                        <strong id="diagSchedInterval">-</strong>
+                        <small id="diagSchedCountdown">-</small>
+                    </article>
+                    <article class="stat-card">
+                        <div class="stat-head"><span>429 circuit breakers</span><span id="diagCooldownBadge" class="badge badge-success">Healthy</span></div>
+                        <strong id="diagCooldownCount">0</strong>
+                        <small id="diagCooldownSub">Auto demotion to -1 ready</small>
+                    </article>
+                    <article class="stat-card">
+                        <div class="stat-head"><span>Last apply health</span><span id="diagApplyBadge" class="badge badge-subtle">-</span></div>
+                        <strong id="diagApplyStats">-</strong>
+                        <small id="diagApplyTime">-</small>
+                    </article>
+                </section>
 
-                <!-- Section Card 3: Latest Execution & Desensitized Audit Stream -->
-                <div class="diag-card">
-                    <h3 class="diag-card-title">
-                        <span>📊</span>
-                        <span data-i18n="diagSectionAudit">最近写入执行与脱敏审计</span>
-                    </h3>
-                    <div class="diag-audit-box">
-                        <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;" data-i18n="diagAuditSummaryLabel">Audit Stream</div>
+                <section class="card" id="diagSectionScheduler">
+                    <div class="card-head"><div><h2>Scheduling details</h2><p>Interval, background worker and the active time window.</p></div></div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Base interval</strong></div>
+                        <div id="diagSchedDetailInterval" class="setting-control mono">-</div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Background worker</strong></div>
+                        <div id="diagSchedDetailWorker" class="setting-control">-</div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Last auto run</strong></div>
+                        <div id="diagSchedDetailLastRun" class="setting-control mono">-</div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Next run (estimated)</strong></div>
+                        <div id="diagSchedDetailNextRun" class="setting-control mono">-</div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-copy"><strong>Window policy</strong><span id="diagSchedDetailWindowText" class="mono">-</span></div>
+                        <div class="setting-control"><span id="diagSchedDetailWindowBadge" class="badge badge-subtle">-</span></div>
+                    </div>
+                </section>
+
+                <section class="card" id="diagSectionCooldown">
+                    <div class="card-head"><div><h2>429 cooldowns</h2><p>Credentials temporarily demoted to -1 after rate limiting.</p></div></div>
+                    <div id="diagCooldownContent" class="card-body">
+                        <div class="default-notice">` + iconCheck + `<span>No credentials in 429 cooldown; all accounts are operating normally.</span></div>
+                    </div>
+                </section>
+
+                <section class="card" id="diagSectionAudit">
+                    <div class="card-head"><div><h2>Latest write and redacted audit</h2><p>The most recent apply recorded by the runtime.</p></div></div>
+                    <div class="card-body diag-audit">
+                        <p class="command-label">AUDIT STREAM</p>
                         <div id="diagAuditText" class="diag-audit-text">-</div>
+                        <div id="diagAuditPills" class="diag-pills-row"></div>
                     </div>
-                    <div id="diagAuditPills" class="diag-pills-row" style="margin-top:10px;">
-                        <!-- Succeeded, Failed, Skipped badges -->
-                    </div>
-                </div>
+                </section>
             </div>
         </section>
 `
 
 var diagnosticsPageAsset = managementPageAsset{
-	name:            "Diagnostics",
-	markup:          diagnosticsMarkup,
-	styles:          templateStyleDiagnostics,
-	scripts:         templateScriptDiagnostics,
-	translationKeys: diagnosticsTranslationKeys,
+	name:    "Diagnostics",
+	markup:  diagnosticsMarkup,
+	styles:  templateStyleDiagnostics,
+	scripts: templateScriptDiagnostics,
 }

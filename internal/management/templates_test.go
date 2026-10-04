@@ -69,72 +69,42 @@ func TestStatusHTML_CSSTokenCompleteness(t *testing.T) {
 	}
 	styleCSS := html[styleStart+7 : styleEnd]
 
-	// Extract :root block tokens (light theme)
+	// The palette mirrors key-model-access: light by default, with CPAMC's
+	// white and dark themes selected through data-theme.
 	rootTokens := extractCSSTokens(t, styleCSS, ":root {", "}")
 	if len(rootTokens) == 0 {
 		t.Fatalf("expected CSS variables in :root, found none")
 	}
-
-	// Extract dark media query tokens
-	darkMediaTokens := extractCSSTokens(t, styleCSS, ":root:not([data-theme=\"light\"]) {", "}")
-	if len(darkMediaTokens) == 0 {
-		t.Fatalf("expected CSS variables in @media dark block, found none")
+	darkTokens := extractCSSTokens(t, styleCSS, ":root[data-theme=\"dark\"] {", "}")
+	if len(darkTokens) == 0 {
+		t.Fatalf("expected CSS variables in :root[data-theme=\"dark\"], found none")
+	}
+	if len(extractCSSTokens(t, styleCSS, ":root[data-theme=\"white\"] {", "}")) == 0 {
+		t.Fatalf("expected CSS variables in :root[data-theme=\"white\"], found none")
 	}
 
-	// Extract explicit [data-theme="dark"] tokens
-	darkAttrTokens := extractCSSTokens(t, styleCSS, ":root[data-theme=\"dark\"] {", "}")
-	if len(darkAttrTokens) == 0 {
-		t.Fatalf("expected CSS variables in :root[data-theme=\"dark\"] block, found none")
-	}
-
-	// Ensure all required core tokens exist in root
 	requiredTokens := []string{
-		"--bg-primary",
-		"--bg-surface",
-		"--bg-card",
-		"--bg-subtle",
-		"--border-color",
-		"--border-subtle",
-		"--text-primary",
-		"--text-secondary",
-		"--text-muted",
-		"--accent-blue",
-		"--accent-green",
-		"--accent-yellow",
-		"--accent-red",
-		"--accent-purple",
-		"--meter-bg",
-		"--meter-fill",
-		"--meter-warn",
-		"--meter-danger",
-		"--badge-boost-bg",
-		"--badge-boost-border",
-		"--badge-boost-text",
-		"--diff-from-bg",
-		"--diff-from-text",
-		"--diff-to-bg",
-		"--diff-to-text",
+		"--bg", "--surface", "--surface-solid", "--surface-raised", "--surface-subtle",
+		"--text", "--text-secondary", "--text-tertiary",
+		"--border", "--border-strong",
+		"--accent", "--accent-soft",
+		"--success", "--success-soft", "--caution", "--caution-soft", "--danger", "--danger-soft", "--boost", "--boost-soft",
+		"--meter-track-bg", "--meter-track-border",
+		"--shadow-card", "--shadow-float",
 	}
-
 	for _, token := range requiredTokens {
 		if _, ok := rootTokens[token]; !ok {
 			t.Errorf("missing required token in :root: %s", token)
 		}
-		if _, ok := darkMediaTokens[token]; !ok {
-			t.Errorf("missing required token in dark media query: %s", token)
-		}
-		if _, ok := darkAttrTokens[token]; !ok {
-			t.Errorf("missing required token in data-theme='dark': %s", token)
-		}
 	}
 
-	// Completeness verification: Every token defined in :root must have a dark counterpart
-	for token := range rootTokens {
-		if _, ok := darkMediaTokens[token]; !ok {
-			t.Errorf("token %q defined in :root but missing in @media (prefers-color-scheme: dark)", token)
+	// Every colour or shadow in the light palette must be redefined for dark.
+	for token, value := range rootTokens {
+		if !strings.HasPrefix(value, "#") && !strings.HasPrefix(value, "rgb") && !strings.HasPrefix(token, "--shadow") {
+			continue
 		}
-		if _, ok := darkAttrTokens[token]; !ok {
-			t.Errorf("token %q defined in :root but missing in :root[data-theme=\"dark\"]", token)
+		if _, ok := darkTokens[token]; !ok {
+			t.Errorf("colour token %q defined in :root but missing in :root[data-theme=\"dark\"]", token)
 		}
 	}
 }
@@ -147,7 +117,7 @@ func TestStatusHTML_ProbeDetailsCoverBothModelGroups(t *testing.T) {
 	if !strings.Contains(html, "groups: groups") {
 		t.Fatal("probe details must pass grouped records to the modal")
 	}
-	if !strings.Contains(html, "history-comparison-table") || !strings.Contains(html, "本次探测 Gemini 额度") || !strings.Contains(html, "本次探测 Claude/GPT 额度") {
+	if !strings.Contains(html, "history-comparison-table") || !strings.Contains(html, "Gemini quota this probe") || !strings.Contains(html, "Claude/GPT quota this probe") {
 		t.Fatal("probe details modal must render one account comparison table with both model-group columns")
 	}
 }
@@ -180,7 +150,7 @@ func TestStatusHTML_CredentialMetadataIsInline(t *testing.T) {
 
 func TestStatusHTML_AutoScheduleHasDistinctCompositeHistory(t *testing.T) {
 	html := management.StatusHTML
-	if !strings.Contains(html, `k === "auto_apply"`) || !strings.Contains(html, `"自动调度"`) {
+	if !strings.Contains(html, `k === "auto_apply"`) || !strings.Contains(html, `"Auto schedule"`) {
 		t.Fatal("automatic scheduling must have a distinct execution-history label")
 	}
 	if !strings.Contains(html, `showModal("auto-history"`) {
@@ -233,11 +203,11 @@ func TestStatusHTML_ContainsRequiredUIElements(t *testing.T) {
 		name     string
 		contains string
 	}{
-		{"5h Short Window meter", "shortWindow"},
-		{"7d Weekly Window meter", "longWindow"},
+		{"5h Short Window meter", `renderQuotaMeter("5h window"`},
+		{"7d Weekly Window meter", `renderQuotaMeter("7d window"`},
 		{"Countdown clocks", "meter-countdown"},
-		{"Adaptive C_cycle burn rate", "burnLabel"},
-		{"Weekly urgency index", "urgencyLabel"},
+		{"Adaptive C_cycle burn rate", "Burn rate <strong>"},
+		{"Weekly urgency index", "Urgency <strong>"},
 		{"Boost badge styling", "badge-boost"},
 		{"Model Group dropdown", "modelGroupSelect"},
 		{"Gemini model group option", "gemini"},
@@ -271,10 +241,6 @@ func TestStatusHTML_ContainsRequiredUIElements(t *testing.T) {
 		t.Errorf("StatusHTML should not contain rawDiagnostics pre block")
 	}
 
-	// Verify old inaccurate "宿主已手动禁用" is removed
-	if strings.Contains(html, "宿主已手动禁用") {
-		t.Errorf("StatusHTML should not contain '宿主已手动禁用'")
-	}
 	// Verify "priority <= 0" is removed
 	if strings.Contains(html, "priority <= 0") {
 		t.Errorf("StatusHTML should not contain 'priority <= 0'")

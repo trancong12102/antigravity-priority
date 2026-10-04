@@ -1,14 +1,6 @@
 package management
 
-const templateScriptShellCore = `        const LANG_STORAGE_KEY = "antigravity_priority_lang";
-        let currentLang = "en-US";
-        try {
-            const savedLang = localStorage.getItem(LANG_STORAGE_KEY);
-            if (savedLang === "zh-CN" || savedLang === "en-US") {
-                currentLang = savedLang;
-            }
-        } catch (_) {}
-        let activeTab = "overview";
+const templateScriptShellCore = `        let activeTab = "overview";
         let countdownInterval = null;
         let dashboardRefreshInterval = null;
         let silentDashboardRefreshInFlight = false;
@@ -16,172 +8,105 @@ const templateScriptShellCore = `        const LANG_STORAGE_KEY = "antigravity_p
         let scheduleConfig = null;
         let dynamicConfig = null;
         let isAuthBlocked = false;
+        let sessionActive = false;
+        let sessionConnecting = false;
 
-        function getManagementKey() {
+        // Mirrors CPAMC secureStorage v1. This is reversible obfuscation for session
+        // compatibility, not cryptography and not a new security boundary.
+        function decodeStoredValue(raw) {
+            if (!raw || raw.indexOf(OBFUSCATION_PREFIX) !== 0) return raw;
+            const encoded = atob(raw.slice(OBFUSCATION_PREFIX.length));
+            const encrypted = Uint8Array.from(encoded, function(character) { return character.charCodeAt(0); });
+            const key = new TextEncoder().encode(OBFUSCATION_SALT + "|" + window.location.host + "|" + navigator.userAgent);
+            const decoded = new Uint8Array(encrypted.length);
+            for (let index = 0; index < encrypted.length; index += 1) decoded[index] = encrypted[index] ^ key[index % key.length];
+            return new TextDecoder().decode(decoded);
+        }
+
+        function readStoredValue(name) {
             try {
-                const keys = ['management_key', 'management-key', 'managementKey', 'cpa_management_key', 'admin_key', 'key'];
-                for (const k of keys) {
-                    const v = localStorage.getItem(k) || sessionStorage.getItem(k);
-                    if (v && v.trim()) return v.trim();
-                }
-            } catch (_) {}
-
-            try {
-                if (window.parent && window.parent !== window) {
-                    const keys = ['management_key', 'management-key', 'managementKey', 'cpa_management_key', 'admin_key', 'key'];
-                    for (const k of keys) {
-                        const v = window.parent.localStorage.getItem(k) || window.parent.sessionStorage.getItem(k);
-                        if (v && v.trim()) return v.trim();
-                    }
-                    const parentParams = new URLSearchParams(window.parent.location.search);
-                    const pKey = parentParams.get('key') || parentParams.get('management_key') || parentParams.get('management-key');
-                    if (pKey && pKey.trim()) return pKey.trim();
-                }
-            } catch (_) {}
-
-            try {
-                const params = new URLSearchParams(window.location.search);
-                const qKey = params.get('key') || params.get('management_key') || params.get('management-key');
-                if (qKey && qKey.trim()) return qKey.trim();
-            } catch (_) {}
-
-            return "";
-        }
-
-        function setSavedKey(key) {
-            try {
-                if (key) {
-                    localStorage.setItem('management_key', key.trim());
-                    sessionStorage.setItem('management_key', key.trim());
-                } else {
-                    localStorage.removeItem('management_key');
-                    sessionStorage.removeItem('management_key');
-                }
-            } catch (_) {}
-        }
-
-        function openKeyModal() {
-            const input = document.getElementById("manualKeyInput");
-            if (input) input.value = getManagementKey();
-            const modal = document.getElementById("keyModal");
-            if (modal) modal.hidden = false;
-        }
-
-        function closeKeyModal() {
-            const modal = document.getElementById("keyModal");
-            if (modal) modal.hidden = true;
-        }
-
-        function saveKeyAndRefresh() {
-            const input = document.getElementById("manualKeyInput");
-            if (input) {
-                setSavedKey(input.value);
-            }
-            isAuthBlocked = false;
-            closeKeyModal();
-            initializeApp();
-        }
-
-        function cleanInlineThemeStyles() {
-            const root = document.documentElement;
-            const cpaVarNames = [
-                '--bg-primary', '--bg-secondary', '--bg-tertiary', '--bg-quinary', '--bg-hover',
-                '--text-primary', '--text-secondary', '--text-tertiary', '--text-muted',
-                '--border-color', '--border-primary', '--border-secondary', '--border-hover',
-                '--primary-color', '--primary-hover', '--primary-active', '--primary-contrast',
-                '--success-color', '--warning-color', '--error-color', '--danger-color',
-                '--amber-color', '--quota-medium-color', '--floating-surface',
-                '--bg-surface', '--bg-card', '--bg-subtle', '--meter-bg'
-            ];
-            for (const name of cpaVarNames) {
-                root.style.removeProperty(name);
+                const raw = localStorage.getItem(name);
+                if (raw === null) return null;
+                const decoded = decodeStoredValue(raw);
+                try { return JSON.parse(decoded); } catch (_) { return decoded; }
+            } catch (_) {
+                return null;
             }
         }
 
-        // Helper for DevServer and standalone console debugging:
-        // window.__setTheme('light' | 'dark') or window.setTheme('light' | 'dark')
+        // The Management Key is read from CPAMC's saved session on every request and
+        // is never copied into this page's own storage.
+        function readCPAMCManagementKey() {
+            try {
+                if (localStorage.getItem("isLoggedIn") !== "true") return "";
+                const persisted = readStoredValue(CPAMC_AUTH_KEY);
+                const current = persisted && typeof persisted === "object" && persisted.state ? persisted.state.managementKey : "";
+                if (typeof current === "string" && current.trim()) return current.trim();
+                const legacy = readStoredValue("managementKey");
+                return typeof legacy === "string" ? legacy.trim() : "";
+            } catch (_) {
+                return "";
+            }
+        }
+
+        function setSessionState(kind, title, message) {
+            document.getElementById("authTitle").textContent = title;
+            document.getElementById("authMessage").textContent = message;
+            const icon = document.getElementById("sessionIcon");
+            icon.classList.toggle("error", kind === "error");
+            icon.innerHTML = kind === "loading" ? ICONS.spinner : kind === "error" ? ICONS.warning : ICONS.lock;
+            document.getElementById("retrySessionButton").hidden = kind !== "error";
+        }
+
+        function resolveCPAMCTheme() {
+            try {
+                if (window.self !== window.top) {
+                    const parentTheme = window.parent.document.documentElement.getAttribute("data-theme");
+                    return parentTheme === "dark" || parentTheme === "white" ? parentTheme : "light";
+                }
+            } catch (_) {}
+            try {
+                const persisted = JSON.parse(localStorage.getItem(CPAMC_THEME_KEY) || "null");
+                const theme = persisted && persisted.state ? persisted.state.theme : "";
+                if (theme === "dark" || theme === "white" || theme === "light") return theme;
+                if (theme === "auto") return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "white";
+            } catch (_) {}
+            return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "white";
+        }
+
+        function applyTheme(theme) {
+            if (theme === "light") document.documentElement.removeAttribute("data-theme");
+            else document.documentElement.setAttribute("data-theme", theme);
+        }
+
+        function syncTheme() {
+            applyTheme(resolveCPAMCTheme());
+        }
+
+        // Console helper for the devserver and standalone debugging:
+        // window.setTheme("light" | "white" | "dark")
         window.__setTheme = window.setTheme = function(theme) {
-            cleanInlineThemeStyles();
-            const targetTheme = (theme === "dark" || theme === "light") ? theme : "light";
-            document.documentElement.setAttribute("data-theme", targetTheme);
-            return "Theme switched to: " + targetTheme;
+            const target = theme === "dark" || theme === "white" ? theme : "light";
+            applyTheme(target);
+            return "Theme switched to: " + target;
         };
 
-        function syncThemeFromParent() {
+        function initializeChrome() {
+            document.documentElement.classList.toggle("is-embedded", window.self !== window.top);
+            syncTheme();
             try {
-                if (window.parent && window.parent !== window && window.parent.document && window.parent.document.documentElement) {
-                    const pDoc = window.parent.document.documentElement;
-                    const pBody = window.parent.document.body;
-
-                    const pTheme = pDoc.getAttribute("data-theme") || (pBody && pBody.getAttribute("data-theme"));
-                    const isDark = (pDoc.classList && pDoc.classList.contains("dark")) ||
-                                   (pBody && pBody.classList && pBody.classList.contains("dark")) ||
-                                   pTheme === "dark";
-
-                    const resolvedTheme = isDark ? "dark" : "light";
-                    document.documentElement.setAttribute("data-theme", resolvedTheme);
-
-                    cleanInlineThemeStyles();
-
-                    const parentStyle = window.parent.getComputedStyle(pDoc);
-                    const cpaVarNames = [
-                        '--bg-primary', '--bg-secondary', '--bg-tertiary', '--bg-quinary', '--bg-hover',
-                        '--text-primary', '--text-secondary', '--text-tertiary', '--text-muted',
-                        '--border-color', '--border-primary', '--border-secondary', '--border-hover',
-                        '--primary-color', '--primary-hover', '--primary-active', '--primary-contrast',
-                        '--success-color', '--warning-color', '--error-color', '--danger-color',
-                        '--amber-color', '--quota-medium-color', '--floating-surface'
-                    ];
-
-                    for (const name of cpaVarNames) {
-                        const val = parentStyle.getPropertyValue(name);
-                        if (val && val.trim()) {
-                            document.documentElement.style.setProperty(name, val.trim());
-                        }
-                    }
-
-                    const sec = parentStyle.getPropertyValue('--bg-secondary') || parentStyle.getPropertyValue('--bg-primary');
-                    const tert = parentStyle.getPropertyValue('--bg-tertiary');
-                    if (sec && sec.trim()) {
-                        document.documentElement.style.setProperty('--bg-surface', sec.trim());
-                        document.documentElement.style.setProperty('--bg-card', sec.trim());
-                    }
-                    if (tert && tert.trim()) {
-                        document.documentElement.style.setProperty('--bg-subtle', tert.trim());
-                        document.documentElement.style.setProperty('--meter-bg', tert.trim());
-                    }
-                    return;
+                if (window.self !== window.top) {
+                    new MutationObserver(syncTheme).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
                 }
             } catch (_) {}
-
-            // Standalone or DevServer mode (no parent CPA iframe)
-            if (!document.documentElement.getAttribute("data-theme")) {
-                const isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-                document.documentElement.setAttribute("data-theme", isDark ? "dark" : "light");
-            }
         }
 
-        syncThemeFromParent();
-        try {
-            if (window.parent && window.parent !== window && window.parent.document) {
-                const observer = new MutationObserver(function() {
-                    syncThemeFromParent();
-                });
-                observer.observe(window.parent.document.documentElement, {
-                    attributes: true,
-                    attributeFilter: ["data-theme", "class", "style"]
-                });
-                if (window.parent.document.body) {
-                    observer.observe(window.parent.document.body, {
-                        attributes: true,
-                        attributeFilter: ["data-theme", "class", "style"]
-                    });
-                }
+        function isAutoApplyEnabled() {
+            if (dynamicConfig && dynamicConfig.auto_apply !== undefined) return Boolean(dynamicConfig.auto_apply);
+            if (latestDiagnostics && latestDiagnostics.management_api && latestDiagnostics.management_api.auto_apply !== undefined) {
+                return Boolean(latestDiagnostics.management_api.auto_apply);
             }
-        } catch (_) {}
-
-        function t(key) {
-            return (I18N[currentLang] && I18N[currentLang][key]) || I18N["zh-CN"][key] || key;
+            return false;
         }
 
         function isCurrentTimeInScheduleWindow(startStr, endStr) {
@@ -204,30 +129,12 @@ const templateScriptShellCore = `        const LANG_STORAGE_KEY = "antigravity_p
             return nowMin >= startMin || nowMin < endMin;
         }
 
-        function toggleLanguage() {
-            currentLang = currentLang === "zh-CN" ? "en-US" : "zh-CN";
-            try {
-                localStorage.setItem(LANG_STORAGE_KEY, currentLang);
-            } catch (_) {}
-            applyLanguage();
-            renderDashboard();
-            renderHistory();
-            renderDiagnostics();
-            renderScheduleStatus();
-            if (dynamicConfig) renderDynamicConfigForm(dynamicConfig);
-        }
-
-        function applyLanguage() {
-            document.documentElement.lang = currentLang;
-            document.querySelectorAll("[data-i18n]").forEach(el => {
-                const key = el.getAttribute("data-i18n");
-                if (key && I18N[currentLang] && I18N[currentLang][key]) {
-                    el.innerHTML = I18N[currentLang][key];
-                }
-            });
-            const langLabel = document.getElementById("langLabel");
-            if (langLabel) langLabel.textContent = currentLang === "zh-CN" ? "EN / 中文" : "中文 / EN";
-            updateAllCustomSelectDisplays();
+        // Go encodes an unset time.Time as year 1; treat it like a missing value.
+        function formatDateTime(value) {
+            if (!value) return "-";
+            var date = new Date(value);
+            if (isNaN(date.getTime()) || date.getUTCFullYear() <= 1) return "-";
+            return date.toLocaleString("en-US");
         }
 
 `

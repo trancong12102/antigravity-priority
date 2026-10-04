@@ -2,10 +2,10 @@ package management
 
 const templateScriptOverviewReset = `        async function triggerReset() {
             var confirmed = await showThemedConfirm({
-                title: t("confirmResetTitle"),
-                message: t("confirmResetMessage"),
-                confirmText: currentLang === "zh-CN" ? "确认重置" : "Reset",
-                cancelText: currentLang === "zh-CN" ? "取消" : "Cancel",
+                title: "Reset every priority?",
+                message: "This clears the custom priority field of every Antigravity credential, restoring the host's default unset state.",
+                confirmText: "Reset",
+                cancelText: "Cancel",
                 isDanger: true
             });
             if (!confirmed) return;
@@ -14,7 +14,7 @@ const templateScriptOverviewReset = `        async function triggerReset() {
             if (btn) btn.disabled = true;
             try {
                 const result = await apiFetch(RESET_PATH, { method: "POST" });
-                showToast(result.message || t("resetSuccess"), "success");
+                showToast(result.message || "All credential priorities were reset to the default unset state", "success");
                 await refreshDashboard();
             } catch (err) {
                 showToast(err.message, "error");
@@ -28,7 +28,7 @@ const templateScriptOverviewReset = `        async function triggerReset() {
             var target = new Date(targetDateStr).getTime();
             var now = Date.now();
             var diff = target - now;
-            if (diff <= 0) return currentLang === "zh-CN" ? "就绪" : "Ready";
+            if (diff <= 0) return "Ready";
 
             var days = Math.floor(diff / (1000 * 60 * 60 * 24));
             var hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));

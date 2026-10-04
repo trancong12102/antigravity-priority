@@ -23,12 +23,6 @@ func TestManagementPageAssetContract(t *testing.T) {
 		if strings.TrimSpace(feature.markup) == "" {
 			t.Errorf("%s feature has no markup asset", feature.name)
 		}
-		if strings.TrimSpace(feature.styles) == "" {
-			t.Errorf("%s feature has no style asset", feature.name)
-		}
-		if len(feature.translationKeys) == 0 {
-			t.Errorf("%s feature has no translation ownership declaration", feature.name)
-		}
 	}
 
 	if got := strings.Count(StatusHTML, "<section id=\"panel"); got != len(expectedNames) {
@@ -55,7 +49,7 @@ func TestOverview_SingleProbeButtonAndStatusDisabledBadge(t *testing.T) {
 	if !strings.Contains(StatusHTML, `onclick=\"probeSingleCredential('`) {
 		t.Fatal("overview card must render single-credential probe button")
 	}
-	if !strings.Contains(StatusHTML, `t("statusDisabled")`) {
+	if !strings.Contains(StatusHTML, `statusBadge = "<span class=\"badge badge-subtle\">Disabled</span>";`) {
 		t.Fatal("overview card must render statusDisabled badge for manually disabled accounts")
 	}
 	if !strings.Contains(StatusHTML, `item.target && item.target.disabled && !isManuallyDisabled`) {
@@ -63,40 +57,39 @@ func TestOverview_SingleProbeButtonAndStatusDisabledBadge(t *testing.T) {
 	}
 }
 
-func TestStatusHTML_FeatureTranslationsExistInBothLanguages(t *testing.T) {
-	zhKeys := languageKeys(t, "zh-CN")
-	enKeys := languageKeys(t, "en-US")
-
-	for _, feature := range managementPageFeatures {
-		for _, key := range feature.translationKeys {
-			if _, ok := zhKeys[key]; !ok {
-				t.Errorf("%s feature translation key %q is missing from zh-CN", feature.name, key)
-			}
-			if _, ok := enKeys[key]; !ok {
-				t.Errorf("%s feature translation key %q is missing from en-US", feature.name, key)
-			}
+func TestStatusHTML_EnglishOnly(t *testing.T) {
+	if hanRE := regexp.MustCompile(`\p{Han}`); hanRE.MatchString(StatusHTML) {
+		t.Fatalf("assembled page contains Han characters: %q", hanRE.FindAllString(StatusHTML, 10))
+	}
+	if !strings.Contains(StatusHTML, `<html lang="en">`) {
+		t.Error("document language must be English")
+	}
+	for _, leftover := range []string{"data-i18n", "I18N", "currentLang", "toggleLanguage", "applyLanguage", "LANG_STORAGE_KEY", "langLabel", "zh-CN", "en-US\"]"} {
+		if strings.Contains(StatusHTML, leftover) {
+			t.Errorf("assembled page still carries language-switch scaffolding %q", leftover)
 		}
 	}
-
-	dataKeys := regexp.MustCompile(`data-i18n="([A-Za-z][A-Za-z0-9_]*)"`).FindAllStringSubmatch(StatusHTML, -1)
-	for _, match := range dataKeys {
-		key := match[1]
-		if _, ok := zhKeys[key]; !ok {
-			t.Errorf("assembled markup references missing zh-CN key %q", key)
-		}
-		if _, ok := enKeys[key]; !ok {
-			t.Errorf("assembled markup references missing en-US key %q", key)
-		}
+	if regexp.MustCompile(`\bt\(\s*["']`).MatchString(extractPageScript(t)) {
+		t.Error("script still resolves strings through a translation lookup")
 	}
 
-	callKeys := regexp.MustCompile(`\bt\("([A-Za-z][A-Za-z0-9_]*)"\)`).FindAllStringSubmatch(extractPageScript(t), -1)
-	for _, match := range callKeys {
-		key := match[1]
-		if _, ok := zhKeys[key]; !ok {
-			t.Errorf("assembled script references missing zh-CN key %q", key)
-		}
-		if _, ok := enKeys[key]; !ok {
-			t.Errorf("assembled script references missing en-US key %q", key)
+	// Static markup must already be the final English text so nothing is
+	// swapped in after load.
+	markup := StatusHTML[:strings.Index(StatusHTML, "<script>")]
+	for _, text := range []string{
+		"Connecting to management session",
+		"Antigravity credentials",
+		"Total credentials",
+		"Fetch quota",
+		"Reset priority",
+		"Recent runs",
+		"Scheduler and health",
+		"Auto periodic scheduling",
+		"Reset to defaults",
+		"How priorities are computed",
+	} {
+		if !strings.Contains(markup, text) {
+			t.Errorf("static markup is missing English text %q", text)
 		}
 	}
 }
@@ -153,7 +146,7 @@ func TestStatusHTML_OperationalWorkflowContract(t *testing.T) {
 		"function saveDynamicConfig()",
 		"CONFIG_PATH",
 		"function resetDynamicConfigToDefaults()",
-		"confirmResetConfigTitle",
+		"Reset configuration to defaults?",
 	}
 	for _, snippet := range workflowSnippets {
 		if !strings.Contains(StatusHTML, snippet) {
@@ -245,9 +238,7 @@ const document = {
     createElement: function() { return element(); }
 };
 function showToast(message, kind) { toastCalls.push({message, kind}); }
-function t(key) { return key; }
 function escapeHTML(value) { return String(value); }
-let currentLang = "zh-CN";
 dynamicConfig = { antigravity_model_group: "gemini" };
 latestSnapshot = { active_model_group: "gemini", groups: { gemini: { changes: ` + tc.changes + `, items: ` + tc.items + ` } } };
 
@@ -261,7 +252,7 @@ latestSnapshot = { active_model_group: "gemini", groups: { gemini: { changes: ` 
         throw new Error("unexpected toast count: " + toastCalls.length);
     }
     if (expected.modal) {
-        const expectedSummaryKey = expected.mode === "projected" ? "projectedApplyPreview" : "pendingApplyPreview";
+        const expectedSummaryKey = expected.mode === "projected" ? "Current target preview" : "Credentials to update";
         if (elements.modalSummary.textContent.indexOf(expectedSummaryKey) !== 0) {
             throw new Error("unexpected preview summary: " + elements.modalSummary.textContent);
         }
@@ -300,14 +291,14 @@ const document = {
     getElementById: function(id) { return elements[id] || null; }
 };
 const SAMPLES_PATH = "/samples";
-const currentLang = "zh-CN";
-function t(key) { return key; }
 function escapeHTML(value) { return String(value); }
+function formatDateTime(value) { return value ? new Date(value).toISOString() : "-"; }
+function quotaFillClass(percent) { return percent <= 10 ? "meter-fill-danger" : "meter-fill-healthy"; }
 async function apiFetch() {
     return {
         groups: {
-            gemini: {name:"Gemini 模型", samples:[{observed_at:"2026-08-23T02:00:00Z",short_window_rem:100,long_window_rem:100}]},
-            claude_gpt: {name:"Claude & GPT 模型", samples:[
+            gemini: {name:"Gemini models", samples:[{observed_at:"2026-08-23T02:00:00Z",short_window_rem:100,long_window_rem:100}]},
+            claude_gpt: {name:"Claude & GPT models", samples:[
                 {observed_at:"2026-08-23T02:00:00Z",short_window_rem:0,long_window_rem:45},
                 {observed_at:"2026-08-23T02:15:00Z",short_window_rem:100,long_window_rem:45}
             ]}
@@ -352,7 +343,6 @@ const document = {
     createElement: function() { return element(); }
 };
 const SAMPLES_PATH = "/samples";
-const currentLang = "zh-CN";
 const latestDiagnostics = {run_history:[{kind:"probe",probe_round_id:"round-1"}]};
 function showToast(message, kind) { throw new Error(message + " (" + kind + ")"); }
 function escapeHTML(value) { return String(value); }
@@ -363,7 +353,6 @@ function apiFetch(path) {
     }
     return Promise.resolve({records:[{email:"claude@example.com",sample:{observed_at:"2026-08-23T02:01:00Z",short_window_rem:75,long_window_rem:0}}]});
 }
-function t(key) { return key; }
 (async function() {
     showHistoryDetails(0);
     await new Promise(function(resolve) { setTimeout(resolve, 0); });
@@ -372,8 +361,8 @@ function t(key) { return key; }
     if (!calls.some(function(path) { return path.indexOf("model_group=claude_gpt") >= 0; })) throw new Error("Claude/GPT probe samples were not requested");
     if (elements.modalDiffList.innerHTML.indexOf("history-comparison-table") < 0) throw new Error("probe history comparison table is missing");
     if (elements.modalDiffList.innerHTML.indexOf("history-comparison-quota-only") < 0) throw new Error("probe history must use the quota-only table layout");
-    if (elements.modalDiffList.innerHTML.indexOf("本次探测 Gemini 额度") < 0 || elements.modalDiffList.innerHTML.indexOf("本次探测 Claude/GPT 额度") < 0) throw new Error("probe history model-group columns are missing");
-    if (elements.modalDiffList.innerHTML.indexOf("优先级变化") >= 0) throw new Error("probe history must not render a priority column");
+    if (elements.modalDiffList.innerHTML.indexOf("Gemini quota this probe") < 0 || elements.modalDiffList.innerHTML.indexOf("Claude/GPT quota this probe") < 0) throw new Error("probe history model-group columns are missing");
+    if (elements.modalDiffList.innerHTML.indexOf("Priority change") >= 0) throw new Error("probe history must not render a priority column");
     if (elements.modalDiffList.innerHTML.indexOf("gemini@example.com") < 0 || elements.modalDiffList.innerHTML.indexOf("claude@example.com") < 0) throw new Error("probe history accounts are missing");
 })().catch(function(err) {
     console.error(err.stack || err.message);
@@ -405,7 +394,6 @@ const document = {
     createElement: function() { return element(); }
 };
 const SAMPLES_PATH = "/samples";
-const currentLang = "zh-CN";
 const latestDiagnostics = {run_history:[{
     kind:"auto_apply",
     trigger:"auto_apply",
@@ -419,15 +407,14 @@ function escapeHTML(value) { return String(value); }
 function apiFetch(path) {
     return Promise.resolve({records:[{email:"account@example.com",sample:{observed_at:"2026-08-24T02:00:00Z",short_window_rem:90,long_window_rem:55}}]});
 }
-function t(key) { return key; }
 function extractChanges(result) { return result && Array.isArray(result.changes) ? result.changes : []; }
 function formatReason(reason) { return reason || ""; }
 (async function() {
     showHistoryDetails(0);
     await new Promise(function(resolve) { setTimeout(resolve, 0); });
-    if (elements.modalTitle.textContent !== "自动调度明细") throw new Error("automatic schedule title is missing");
+    if (elements.modalTitle.textContent !== "Automatic schedule details") throw new Error("automatic schedule title is missing");
     if (elements.modalDiffList.innerHTML.indexOf("history-comparison-table") < 0) throw new Error("automatic schedule comparison table is missing");
-    if (elements.modalDiffList.innerHTML.indexOf("优先级变化") < 0) throw new Error("automatic schedule priority column is missing");
+    if (elements.modalDiffList.innerHTML.indexOf("Priority change") < 0) throw new Error("automatic schedule priority column is missing");
     if (elements.modalDiffList.innerHTML.indexOf("account@example.com") < 0) throw new Error("automatic schedule account is missing");
     if ((elements.modalDiffList.innerHTML.match(/history-comparison-row/g) || []).length !== 2) throw new Error("Gemini, Claude/GPT, and priority data were not merged into one account row");
     if (elements.modalDiffList.innerHTML.indexOf("weekly urgency") < 0) throw new Error("automatic schedule priority details are missing");
@@ -439,112 +426,190 @@ function formatReason(reason) { return reason || ""; }
 	runNodeFixture(t, node, "auto-schedule-history.js", harness)
 }
 
-func TestStatusHTML_AuthCircuitBreaker(t *testing.T) {
+func TestStatusHTML_NeverPromptsForOrPersistsManagementKey(t *testing.T) {
+	for _, forbidden := range []string{
+		"keyModal", "manualKeyInput", "openKeyModal", "saveKeyAndRefresh", "setSavedKey",
+		"management_key", "management-key", "URLSearchParams", "sessionStorage", "localStorage.setItem",
+		`type="password"`,
+	} {
+		if strings.Contains(StatusHTML, forbidden) {
+			t.Errorf("page must not prompt for, read from the URL, or persist the Management Key (found %q)", forbidden)
+		}
+	}
+	for _, required := range []string{`"cli-proxy-auth"`, `"enc::v1::"`, `"cli-proxy-api-webui::secure-storage"`, `localStorage.getItem("isLoggedIn") !== "true"`} {
+		if !strings.Contains(StatusHTML, required) {
+			t.Errorf("page must read the CPAMC session like key-model-access (missing %q)", required)
+		}
+	}
+}
+
+func TestStatusHTML_CPAMCSessionGate(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {
-		t.Skip("node is not available; auth circuit-breaker behavior is checked in the Node-enabled verification environment")
+		t.Skip("node is not available; the CPAMC session gate is checked in the Node-enabled verification environment")
 	}
 
 	harness := `
-function element(initial) {
-    return Object.assign({hidden:true,textContent:"",innerHTML:"",value:"",disabled:false,classList:{add:function(){},remove:function(){},toggle:function(){}}}, initial || {});
+function makeElement(id) {
+    const classes = new Set();
+    const attributes = {};
+    return {
+        id: id, hidden: false, textContent: "", innerHTML: "", value: "", disabled: false, title: "", className: "",
+        dataset: {}, style: {}, children: [],
+        classList: {
+            add: function(name) { classes.add(name); },
+            remove: function(name) { classes.delete(name); },
+            contains: function(name) { return classes.has(name); },
+            toggle: function(name, force) { const on = force === undefined ? !classes.has(name) : Boolean(force); if (on) classes.add(name); else classes.delete(name); return on; }
+        },
+        setAttribute: function(name, value) { attributes[name] = String(value); },
+        getAttribute: function(name) { return Object.prototype.hasOwnProperty.call(attributes, name) ? attributes[name] : null; },
+        removeAttribute: function(name) { delete attributes[name]; },
+        appendChild: function(child) { this.children.push(child); },
+        querySelector: function() { return null; },
+        querySelectorAll: function() { return []; },
+        addEventListener: function() {},
+        remove: function() {},
+        focus: function() {}
+    };
 }
-const elements = {
-    keyModal: element(),
-    manualKeyInput: element(),
-    panelOverview: element(),
-    panelHistory: element(),
-    panelDiagnostics: element(),
-    panelConfig: element(),
-    panelHelp: element(),
-    toastRoot: element()
-};
+const elements = {};
 const document = {
-    getElementById: function(id) { return elements[id] || null; },
+    hidden: false,
+    documentElement: makeElement("html"),
+    body: makeElement("body"),
+    getElementById: function(id) {
+        if (!elements[id]) elements[id] = makeElement(id);
+        return elements[id];
+    },
+    querySelector: function() { return null; },
     querySelectorAll: function() { return []; },
     addEventListener: function() {},
-    createElement: function() { return element(); },
-    documentElement: { getAttribute: function() { return "dark"; } }
+    createElement: function() { return makeElement(""); }
 };
+document.getElementById("app").hidden = true;
+document.getElementById("retrySessionButton").hidden = true;
+
+const storageListeners = [];
 const window = {
-    matchMedia: function() { return { matches: true }; },
-    location: { search: "" }
+    location: { host: "cpa.example:8317" },
+    matchMedia: function() { return { matches: false }; },
+    addEventListener: function(type, listener) { if (type === "storage") storageListeners.push(listener); },
+    scrollTo: function() {}
 };
+window.self = window;
+window.top = window;
+const navigator = { userAgent: "SessionGateTest/1.0" };
+function requestAnimationFrame(callback) { callback(); }
+
+const store = new Map();
 const localStorage = {
-    getItem: function() { return null; },
-    setItem: function() {},
-    removeItem: function() {}
-};
-const sessionStorage = {
-    getItem: function() { return null; },
-    setItem: function() {},
-    removeItem: function() {}
+    getItem: function(name) { return store.has(name) ? store.get(name) : null; },
+    setItem: function(name, value) { store.set(name, String(value)); },
+    removeItem: function(name) { store.delete(name); }
 };
 
-let fetchCount = 0;
-global.fetch = async function(path) {
-    fetchCount++;
+// Encodes a value exactly like CPAMC secureStorage v1.
+function cpamcObfuscate(value) {
+    const key = new TextEncoder().encode("cli-proxy-api-webui::secure-storage|" + window.location.host + "|" + navigator.userAgent);
+    const plain = new TextEncoder().encode(value);
+    let binary = "";
+    for (let index = 0; index < plain.length; index += 1) binary += String.fromCharCode(plain[index] ^ key[index % key.length]);
+    return "enc::v1::" + btoa(binary);
+}
+
+const requests = [];
+let respondWith = 200;
+global.fetch = async function(path, options) {
+    requests.push({ path: path, headers: (options && options.headers) || {} });
+    const status = respondWith;
     return {
-        status: 401,
-        ok: false,
-        statusText: "Unauthorized",
-        text: async function() { return "missing management key"; }
+        status: status,
+        ok: status >= 200 && status < 300,
+        statusText: status === 401 ? "Unauthorized" : "OK",
+        text: async function() { return status === 401 ? "{\"error\":\"invalid management key\"}" : JSON.stringify({ paused: false, active_model_group: "gemini" }); }
     };
 };
+function settle() { return new Promise(function(resolve) { setTimeout(resolve, 30); }); }
+function assert(condition, message) { if (!condition) throw new Error(message); }
+function gateVisible() { return elements.authGate && !elements.authGate.hidden && elements.app.hidden; }
 ` + extractPageScript(t) + `
 (async function() {
-    // 1. Initial boot: top-level initializeApp() gets 401 -> sets isAuthBlocked -> stops further initialization
-    await new Promise(function(resolve) { setTimeout(resolve, 50); });
-    if (fetchCount !== 1) {
-        throw new Error("expected exactly 1 fetch before auth circuit-breaker tripped, got " + fetchCount);
-    }
-    if (!isAuthBlocked) {
-        throw new Error("expected isAuthBlocked to be true after 401");
-    }
-    if (elements.keyModal.hidden !== false) {
-        throw new Error("expected keyModal to be visible after 401");
-    }
+    // 1. No CPAMC session: the gate explains what to do, no request is sent and no key is asked for.
+    await settle();
+    assert(requests.length === 0, "no request may be sent without a CPAMC session, got " + requests.length);
+    assert(gateVisible(), "the session gate must be shown without a CPAMC session");
+    assert(elements.authTitle.textContent === "No reusable CPAMC session found", "unexpected gate title: " + elements.authTitle.textContent);
+    assert(elements.authMessage.textContent.indexOf("Remember password") >= 0, "gate must explain the Remember password requirement");
+    assert(elements.retrySessionButton.hidden === false, "gate must offer a retry button");
 
-    // 2. Further calls while auth is blocked must NOT issue network requests
-    try {
-        await apiFetch("/test");
-    } catch (_) {}
-    if (fetchCount !== 1) {
-        throw new Error("expected apiFetch to block without network call when isAuthBlocked=true");
-    }
+    // 2. Logged in but not "Remember password" style session: isLoggedIn alone is not enough.
+    store.set("isLoggedIn", "false");
+    store.set("cli-proxy-auth", cpamcObfuscate(JSON.stringify({ state: { managementKey: "ignored" } })));
+    assert(readCPAMCManagementKey() === "", "a logged-out CPAMC session must not yield a key");
 
-    // 3. Tab switches while blocked must NOT issue network requests
+    // 3. Obfuscated CPAMC session: requests carry the key, the dashboard opens, nothing is written to storage.
+    store.set("isLoggedIn", "true");
+    store.set("cli-proxy-auth", cpamcObfuscate(JSON.stringify({ state: { managementKey: " secret-key " }, version: 0 })));
+    const storedBefore = JSON.stringify(Array.from(store.entries()));
+    await startSession();
+    await settle();
+    assert(requests.length > 0, "a CPAMC session must trigger authenticated requests");
+    requests.forEach(function(request) {
+        assert(request.headers.Authorization === "Bearer secret-key", "request " + request.path + " lacks the Bearer key");
+        assert(request.headers["X-Management-Key"] === "secret-key", "request " + request.path + " lacks X-Management-Key");
+    });
+    assert(!elements.app.hidden && elements.authGate.hidden, "the dashboard must open once the session is verified");
+    assert(JSON.stringify(Array.from(store.entries())) === storedBefore, "the page must not write to localStorage");
+
+    // 4. Legacy plain-text key is still honoured.
+    store.set("cli-proxy-auth", "{}");
+    store.set("managementKey", JSON.stringify("legacy-key"));
+    assert(readCPAMCManagementKey() === "legacy-key", "legacy CPAMC managementKey must be read");
+    store.delete("managementKey");
+    store.set("cli-proxy-auth", cpamcObfuscate(JSON.stringify({ state: { managementKey: "secret-key" } })));
+
+    // 5. CPA rejects the key: gate returns, and nothing else hits the network while blocked.
+    respondWith = 401;
+    requests.length = 0;
+    try { await apiFetch(SNAPSHOT_PATH); } catch (_) {}
+    assert(isAuthBlocked, "a 401 must block further requests");
+    assert(gateVisible(), "a 401 must bring the session gate back");
+    assert(elements.authTitle.textContent === "Management session unavailable", "unexpected 401 gate title: " + elements.authTitle.textContent);
+    const afterReject = requests.length;
+    try { await apiFetch(SNAPSHOT_PATH); } catch (_) {}
     switchTab("diagnostics");
-    if (fetchCount !== 1) {
-        throw new Error("expected switchTab to not fetch when isAuthBlocked=true");
-    }
+    await settle();
+    assert(requests.length === afterReject, "blocked session must not issue requests");
 
-    // 4. Entering valid key and saving resets auth block and allows successful fetch
-    global.fetch = async function(path) {
-        fetchCount++;
-        return {
-            status: 200,
-            ok: true,
-            statusText: "OK",
-            text: async function() { return JSON.stringify({ ok: true, active_model_group: "gemini" }); }
-        };
-    };
-    elements.manualKeyInput.value = "secret_key";
-    saveKeyAndRefresh();
-    await new Promise(function(resolve) { setTimeout(resolve, 50); });
-    if (isAuthBlocked) {
-        throw new Error("expected isAuthBlocked to be false after saveKeyAndRefresh with valid key");
-    }
-    if (fetchCount <= 1) {
-        throw new Error("expected initializeApp to retry requests after key save");
-    }
+    // 6. CPAMC logs in again in another document: the page reconnects by itself.
+    respondWith = 200;
+    store.set("cli-proxy-auth", cpamcObfuscate(JSON.stringify({ state: { managementKey: "fresh-key" } })));
+    storageListeners.forEach(function(listener) { listener({ key: "cli-proxy-auth" }); });
+    await settle();
+    assert(!isAuthBlocked && !elements.app.hidden, "a renewed CPAMC session must reconnect automatically");
+    assert(requests[requests.length - 1].headers.Authorization === "Bearer fresh-key", "reconnect must use the renewed key");
+
+    // 7. CPAMC logs out: the page locks without waiting for a failed request.
+    store.delete("isLoggedIn");
+    storageListeners.forEach(function(listener) { listener({ key: "isLoggedIn" }); });
+    assert(gateVisible(), "logging out of CPAMC must lock the page");
+    assert(elements.authTitle.textContent === "CPAMC session ended", "unexpected logout gate title: " + elements.authTitle.textContent);
+
+    // 8. Theme follows CPAMC's stored theme and storage updates.
+    store.set("cli-proxy-theme", JSON.stringify({ state: { theme: "dark" } }));
+    storageListeners.forEach(function(listener) { listener({ key: "cli-proxy-theme" }); });
+    assert(document.documentElement.getAttribute("data-theme") === "dark", "dark CPAMC theme must apply");
+    store.set("cli-proxy-theme", JSON.stringify({ state: { theme: "light" } }));
+    syncTheme();
+    assert(document.documentElement.getAttribute("data-theme") === null, "light CPAMC theme uses the default palette");
     process.exit(0);
 })().catch(function(err) {
     console.error(err.stack || err.message);
     process.exit(1);
 });
 `
-	runNodeFixture(t, node, "auth-circuit-breaker.js", harness)
+	runNodeFixture(t, node, "cpamc-session-gate.js", harness)
 }
 
 func applyPreviewExpectationJSON(wantModal bool, wantMode string, wantCount, wantToasts int) string {
@@ -573,40 +638,25 @@ func extractPageScript(t *testing.T) string {
 	return StatusHTML[start+len("<script>") : end]
 }
 
-func languageKeys(t *testing.T, language string) map[string]struct{} {
-	t.Helper()
-	script := extractPageScript(t)
-	languageBlockRE := regexp.MustCompile(`(?ms)^\s*"` + regexp.QuoteMeta(language) + `": \{\s*(.*?)^\s*\}`)
-	matches := languageBlockRE.FindAllStringSubmatch(script, -1)
-	if len(matches) == 0 {
-		t.Fatalf("assembled script does not contain %s translations", language)
+func TestStatusHTML_CPAThemeAlignmentAndDevServerHelper(t *testing.T) {
+	if strings.Contains(StatusHTML, "id=\"btnThemeToggle\"") || strings.Contains(StatusHTML, "toggleTheme()") {
+		t.Fatal("the page follows CPAMC's theme and must not expose its own theme toggle")
 	}
-	keys := map[string]struct{}{}
-	keyRE := regexp.MustCompile(`(?m)^\s*([A-Za-z][A-Za-z0-9_]*)\s*:`)
-	for _, languageMatch := range matches {
-		for _, keyMatch := range keyRE.FindAllStringSubmatch(languageMatch[1], -1) {
-			keys[keyMatch[1]] = struct{}{}
+
+	script := extractPageScript(t)
+	for _, snippet := range []string{
+		"window.__setTheme = window.setTheme = function",
+		`const CPAMC_THEME_KEY = "cli-proxy-theme";`,
+		`new MutationObserver(syncTheme).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });`,
+		`if (event.key === CPAMC_THEME_KEY) syncTheme();`,
+	} {
+		if !strings.Contains(script, snippet) {
+			t.Errorf("theme handling must mirror key-model-access (missing %q)", snippet)
 		}
 	}
-	return keys
-}
-
-func TestStatusHTML_CPAThemeAlignmentAndDevServerHelper(t *testing.T) {
-	if strings.Contains(StatusHTML, "id=\"btnThemeToggle\"") {
-		t.Fatal("assembled markup must not expose standalone theme toggle button")
-	}
-	if strings.Contains(StatusHTML, "toggleTheme()") {
-		t.Fatal("assembled markup must not expose toggleTheme inline handler")
-	}
-
-	script := extractPageScript(t)
-	if !strings.Contains(script, "window.__setTheme = window.setTheme = function") {
-		t.Fatal("assembled script must provide window.__setTheme / window.setTheme helper for console debugging")
-	}
-	if !strings.Contains(script, `cleanInlineThemeStyles()`) {
-		t.Fatal("assembled script must clean inline styles when synchronizing theme")
-	}
-	if !strings.Contains(script, `const resolvedTheme = isDark ? "dark" : "light";`) {
-		t.Fatal("syncThemeFromParent must explicitly resolve to dark or light")
+	for _, selector := range []string{`:root[data-theme="white"] {`, `:root[data-theme="dark"] {`} {
+		if !strings.Contains(StatusHTML, selector) {
+			t.Errorf("stylesheet is missing the CPAMC theme palette %s", selector)
+		}
 	}
 }

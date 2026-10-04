@@ -1,216 +1,28 @@
 package management
 
-const templateStyleOverviewCards = `        /* Credentials Display (Grid 3 Columns) */
+const templateStyleOverviewCards = `        /* Credential cards */
         .credentials-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            grid-auto-rows: max-content !important;
-            align-content: start !important;
-            gap: 12px;
+            grid-template-columns: repeat(auto-fill, minmax(18.5rem, 1fr));
+            align-content: start;
+            gap: 0.72rem;
         }
-
-        .cred-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 10px 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            box-shadow: var(--shadow-sm);
-            height: fit-content !important;
-            align-self: start !important;
-        }
-
-        .cred-badge-row {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
-
-        .cred-priority {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-        }
-
-        .cred-info {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-            min-width: 0;
-        }
-
-		.cred-name {
-            font-size: 13px;
-            font-weight: 700;
-            color: var(--text-primary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-		}
-
-		.cred-email {
-			min-width: 0;
-			overflow: hidden;
-			text-overflow: ellipsis;
-		}
-
-		.cred-meta {
-			flex: 0 0 auto;
-            font-size: 11px;
-            color: var(--text-muted);
-            font-family: SFMono-Regular, Consolas, Menlo, monospace;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .metric-pill {
-            display: inline-flex;
-            align-items: center;
-            font-size: 11px;
-            padding: 1px 6px;
-            border-radius: 4px;
-            background: var(--bg-subtle);
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
-        }
-
-        .metric-pill strong {
-            color: var(--text-primary);
-            margin-left: 3px;
-        }
-
-        .metric-pill-urgency {
-            background: var(--accent-blue-subtle) !important;
-            border: 1px solid rgba(37, 99, 235, 0.2) !important;
-            color: var(--accent-blue-text) !important;
-        }
-        .metric-pill-urgency strong {
-            color: var(--accent-blue-text) !important;
-        }
-
-        .metric-pill-burn {
-            background: var(--accent-purple-subtle) !important;
-            border: 1px solid rgba(124, 58, 237, 0.2) !important;
-            color: var(--accent-purple-text) !important;
-        }
-        .metric-pill-burn strong {
-            color: var(--accent-purple-text) !important;
-        }
-
-        .meter-container {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            width: 100%;
-        }
-
-        .meter-label-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-muted);
-        }
-
-        .meter-track {
-            height: 7px;
-            min-height: 7px;
-            background: var(--meter-track-bg);
-            border: 1px solid var(--meter-track-border);
-            border-radius: 999px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .meter-fill {
-            height: 100%;
-            border-radius: 999px;
-            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
-        }
-
-        .meter-fill-healthy { background: var(--accent-green); }
-        .meter-fill-warning { background: var(--meter-warn); }
-        .meter-fill-danger  { background: var(--meter-danger); }
-
-        .meter-countdown {
-            font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-            font-size: 11px;
-            color: var(--text-secondary);
-        }
-
-        .priority-score-box {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .priority-score {
-            font-size: 16px;
-            font-weight: 800;
-            color: var(--accent-blue-text);
-            font-family: SFMono-Regular, Consolas, Menlo, monospace;
-            line-height: 1;
-        }
-
-        .priority-predicted {
-            color: var(--accent-purple-text);
-        }
-
-        .empty-state {
-            grid-column: 1 / -1;
-            width: 100%;
-            box-sizing: border-box;
-            text-align: center;
-            padding: 48px 20px;
-            color: var(--text-muted);
-            font-size: 14px;
-        }
-
-        .sample-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            font-size: 12px;
-            text-align: left;
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid var(--border-color);
-        }
-
-        .sample-table th {
-            padding: 9px 12px;
-            font-weight: 700;
-            color: var(--text-muted);
-            border-bottom: 1px solid var(--border-color);
-            background: var(--bg-subtle);
-            font-size: 11px;
-            white-space: nowrap;
-        }
-
-        .sample-table td {
-            padding: 7px 12px;
-            color: var(--text-primary);
-            font-family: SFMono-Regular, Consolas, Menlo, monospace;
-            font-size: 11.5px;
-            white-space: nowrap;
-            transition: background 0.12s ease;
-        }
-
-        .sample-table tbody.sample-group:hover td {
-            background: var(--bg-hover) !important;
-        }
-
-        .sample-table tbody.sample-group:not(:last-child) td.sample-group-bottom {
-            border-bottom: 1px solid var(--border-color);
-        }
+        .cred-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-solid); box-shadow: 0 2px 9px rgba(0, 0, 0, 0.025); }
+        .cred-head { display: grid; gap: 0.55rem; padding: 0.85rem 0.95rem 0.75rem; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface-subtle) 42%, transparent); }
+        .cred-name { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+        .cred-title { min-width: 0; display: flex; align-items: baseline; gap: 0.25rem; font-size: 0.78rem; }
+        .cred-email { min-width: 0; overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+        .cred-meta { flex: 0 0 auto; color: var(--text-tertiary); font-size: 0.64rem; white-space: nowrap; }
+        .cred-badge-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+        .cred-meters { display: grid; gap: 0.7rem; padding: 0.85rem 0.95rem; }
+        .cred-priority { display: grid; gap: 0.3rem; padding: 0 0.95rem 0.85rem; }
+        .priority-score-box { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.68rem; }
+        .priority-label { color: var(--text-tertiary); font-weight: 600; }
+        .priority-actual { color: var(--text-secondary); font-family: var(--mono); font-weight: 600; }
+        .priority-arrow { color: var(--text-tertiary); }
+        .priority-score { color: var(--text); font-family: var(--mono); font-size: 0.95rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+        .priority-predicted { color: var(--boost); }
+        .cred-reason { color: var(--text-tertiary); font-size: 0.66rem; line-height: 1.4; }
+        .cred-actions { display: flex; justify-content: flex-end; gap: 0.35rem; margin-top: auto; padding: 0.6rem 0.95rem; border-top: 1px solid var(--border); }
 
 `

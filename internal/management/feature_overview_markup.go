@@ -3,85 +3,70 @@ package management
 // overviewMarkup contains the HTML owned by the Overview feature asset.
 const overviewMarkup = `
         <section id="panelOverview">
-            <div class="summary-grid">
-                <div class="kpi-card">
-                    <p class="kpi-title" data-i18n="kpiTotal">总凭证数</p>
-                    <div id="valTotalCreds" class="kpi-value">0</div>
-                    <div id="valTotalDesc" class="kpi-desc">0 活跃可用</div>
-                </div>
-                <div class="kpi-card">
-                    <p class="kpi-title" data-i18n="kpiBoosted">🚀 动态 Boost</p>
-                    <div id="valBoosted" class="kpi-value">0</div>
-                    <div class="kpi-desc" data-i18n="kpiBoostedDesc">高配额充裕候选</div>
-                </div>
-                <div class="kpi-card">
-                    <p class="kpi-title" data-i18n="kpiDepleted">耗尽 / 降级</p>
-                    <div id="valDepleted" class="kpi-value">0</div>
-                    <div class="kpi-desc" data-i18n="kpiDepletedDesc">等待窗口重置</div>
-                </div>
-                <div class="kpi-card">
-                    <p class="kpi-title" data-i18n="kpiLastAudit">最新调度审计</p>
-                    <div id="valLastAudit" class="kpi-value" style="font-size:14px; word-break:break-word;">-</div>
-                    <div id="valNextProbe" class="kpi-desc">-</div>
-                </div>
-            </div>
-
-            <div class="control-bar">
-                <select id="modelGroupSelect" hidden>
-                    <option value="gemini" data-i18n="optGemini">Gemini 模型</option>
-                    <option value="claude_gpt" data-i18n="optClaudeGPT">Claude 与 GPT 模型</option>
-                </select>
-                <div id="customModelGroupSelect" class="custom-select-wrapper">
-                    <button type="button" class="custom-select-trigger" onclick="toggleCustomSelect(event)" aria-haspopup="listbox" aria-expanded="false">
-                        <span id="customSelectLabel" data-i18n="optGemini">Gemini 模型</span>
-                        <span class="custom-select-arrow">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"></path></svg>
-                        </span>
-                    </button>
-                    <div id="customSelectMenu" class="custom-select-options" hidden role="listbox">
-                        <div class="custom-select-option selected" data-value="gemini" onclick="selectModelGroup('gemini', event)" role="option" aria-selected="true">
-                            <span data-i18n="optGemini">Gemini 模型</span>
-                            <span class="custom-select-check">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            </span>
-                        </div>
-                        <div class="custom-select-option" data-value="claude_gpt" onclick="selectModelGroup('claude_gpt', event)" role="option" aria-selected="false">
-                            <span data-i18n="optClaudeGPT">Claude 与 GPT 模型</span>
-                            <span class="custom-select-check">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            </span>
-                        </div>
+            <div class="command-wrap">
+                <div class="commandbar" aria-label="Overview actions">
+                    <div class="command-state">
+                        <span class="command-label">Auto schedule</span>
+                        <button type="button" id="scheduleStatusBadge" class="health-badge" onclick="toggleSchedulePause()" title="Click to toggle pause">
+                            <span class="status-dot neutral"></span><span id="scheduleStatusText">Loading</span>
+                        </button>
+                    </div>
+                    <div class="command-actions">
+                        <select id="modelGroupSelect" class="select-compact" aria-label="Model group" onchange="onModelGroupChange()">
+                            <option value="gemini">Gemini models</option>
+                            <option value="claude_gpt">Claude &amp; GPT models</option>
+                        </select>
+                        <button type="button" class="icon-button" id="btnRefresh" onclick="refreshDashboard({ withSync: true, notifySync: true })" aria-label="Refresh from CPA" title="Refresh from CPA">` + iconRefresh + `</button>
+                        <span class="separator" aria-hidden="true"></span>
+                        <button type="button" class="button secondary compact" id="btnProbe" onclick="triggerProbe()" title="Probe quota for every credential">` + iconProbe + `<span class="label-long">Fetch quota</span></button>
+                        <button type="button" class="button danger compact" id="btnReset" onclick="triggerReset()" title="Reset every priority to unset">` + iconReset + `<span class="label-long">Reset priority</span></button>
+                        <button type="button" class="button primary compact" id="btnApply" onclick="triggerApplyWithConfirm()" title="Write target priorities to CPA">` + iconBolt + `<span class="label-long">Apply</span></button>
                     </div>
                 </div>
-
-                <button type="button" class="btn-secondary" onclick="refreshDashboard({ withSync: true, notifySync: true })" id="btnRefresh">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                    <span data-i18n="btnRefresh">刷新</span>
-                </button>
-                <button type="button" class="btn-secondary" onclick="triggerProbe()" id="btnProbe">
-                    <span>📡 <span data-i18n="btnProbe">刷新配额</span></span>
-                </button>
-                <button type="button" class="btn-primary" onclick="triggerApplyWithConfirm()" id="btnApply">
-                    <span>⚡ <span data-i18n="btnApply">立即写回</span></span>
-                </button>
-                <button type="button" class="btn-danger" onclick="triggerReset()" id="btnReset">
-                    <span>🔄 <span data-i18n="btnReset">重置优先级</span></span>
-                </button>
-                <span id="scheduleStatusBadge" class="schedule-status active" onclick="toggleSchedulePause()" title="Click to toggle pause">
-                    🟢 <span id="scheduleStatusText" data-i18n="scheduleActive">自动调度运行中</span>
-                </span>
             </div>
 
-            <div id="credentialsContainer" class="credentials-grid scroll-container">
-                <div class="empty-state" data-i18n="loading">加载中...</div>
+            <div class="editor">
+                <header class="editor-head">
+                    <div class="editor-title-wrap">
+                        <p class="editor-kicker">Priority overview</p>
+                        <h1>Antigravity credentials</h1>
+                        <p class="editor-subtitle">Live 5h and 7d quota for every credential, with the priority the scheduler would write back to CPA.</p>
+                    </div>
+                </header>
+
+                <section class="stat-grid" aria-label="Credential statistics">
+                    <article class="stat-card">
+                        <span>Total credentials</span>
+                        <strong id="valTotalCreds">0</strong>
+                        <small id="valTotalDesc">0 active</small>
+                    </article>
+                    <article class="stat-card">
+                        <span>Boosted</span>
+                        <strong id="valBoosted">0</strong>
+                        <small>High quota abundance</small>
+                    </article>
+                    <article class="stat-card">
+                        <span>Depleted / down</span>
+                        <strong id="valDepleted">0</strong>
+                        <small>Awaiting window reset</small>
+                    </article>
+                    <article class="stat-card">
+                        <span>Latest audit</span>
+                        <strong id="valLastAudit" class="text-value">-</strong>
+                        <small id="valNextProbe">-</small>
+                    </article>
+                </section>
+
+                <div id="credentialsContainer" class="credentials-grid">
+                    <div class="empty-state">Loading credentials and quota…</div>
+                </div>
             </div>
         </section>
 `
 
 var overviewPageAsset = managementPageAsset{
-	name:            "Overview",
-	markup:          overviewMarkup + overviewSamplesMarkup,
-	styles:          templateStyleOverviewCards,
-	scripts:         templateScriptOverviewActionsCore + templateScriptOverviewReset + templateScriptOverviewRender + templateScriptProbeSchedule + templateScriptOverviewSamples,
-	translationKeys: overviewTranslationKeys,
+	name:    "Overview",
+	markup:  overviewMarkup + overviewSamplesMarkup,
+	styles:  templateStyleOverviewCards,
+	scripts: templateScriptOverviewActionsCore + templateScriptOverviewReset + templateScriptOverviewRender + templateScriptProbeSchedule + templateScriptOverviewSamples,
 }

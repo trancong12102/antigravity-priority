@@ -4,13 +4,13 @@ const templateScriptDiagnostics = `        let latestDiagnostics = null;
 
         function copyDiagnosticsJSON() {
             if (!latestDiagnostics) {
-                showToast(currentLang === "zh-CN" ? "暂无诊断数据可复制" : "No diagnostics data to copy", "info");
+                showToast("No diagnostics data to copy yet", "info");
                 return;
             }
             var text = JSON.stringify(latestDiagnostics, null, 2);
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(text).then(function() {
-                    showToast(t("copiedSuccess") || (currentLang === "zh-CN" ? "诊断数据已成功复制到剪贴板" : "Diagnostics JSON copied to clipboard"), "success");
+                    showToast("Diagnostics JSON copied to clipboard", "success");
                 }).catch(function() {
                     fallbackCopyText(text);
                 });
@@ -31,7 +31,7 @@ const templateScriptDiagnostics = `        let latestDiagnostics = null;
             try {
                 var successful = document.execCommand("copy");
                 if (successful) {
-                    showToast(t("copiedSuccess") || (currentLang === "zh-CN" ? "诊断数据已成功复制到剪贴板" : "Diagnostics JSON copied to clipboard"), "success");
+                    showToast("Diagnostics JSON copied to clipboard", "success");
                 } else {
                     showToast("Copy failed", "error");
                 }
@@ -45,13 +45,6 @@ const templateScriptDiagnostics = `        let latestDiagnostics = null;
             if (!latestDiagnostics) return;
 
             var sched = latestDiagnostics.scheduler || {};
-            var isAutoApplyEnabled = false;
-            if (dynamicConfig && dynamicConfig.auto_apply !== undefined) {
-                isAutoApplyEnabled = Boolean(dynamicConfig.auto_apply);
-            } else if (latestDiagnostics.management_api && latestDiagnostics.management_api.auto_apply !== undefined) {
-                isAutoApplyEnabled = Boolean(latestDiagnostics.management_api.auto_apply);
-            }
-
             var isPaused = scheduleConfig ? Boolean(scheduleConfig.paused) : Boolean(sched.paused);
             var isSleeping = false;
             var windowStart = scheduleConfig && scheduleConfig.window_start ? scheduleConfig.window_start : sched.window_start;
@@ -62,7 +55,7 @@ const templateScriptDiagnostics = `        let latestDiagnostics = null;
                 isSleeping = !isCurrentTimeInScheduleWindow(windowStart, windowEnd);
             }
 
-            // --- 1. KPI Card 1: Scheduler Engine ---
+            // --- 1. Scheduler engine ---
             var schedBadge = document.getElementById("diagSchedBadge");
             var schedInterval = document.getElementById("diagSchedInterval");
             var schedCountdown = document.getElementById("diagSchedCountdown");
@@ -70,83 +63,77 @@ const templateScriptDiagnostics = `        let latestDiagnostics = null;
                 var nextRunAt = sched.next_run_at;
                 var nextStr = nextRunAt ? formatCountdown(nextRunAt) : (sched.next_wait || "-");
 
-                if (!isAutoApplyEnabled) {
+                if (!isAutoApplyEnabled()) {
                     schedBadge.className = "badge badge-subtle";
-                    schedBadge.textContent = t("diagStatusDisabled");
-                    schedCountdown.innerHTML = "<span style=\"color:var(--text-muted); font-weight:600;\">" + t("scheduleDisabled") + "</span>";
+                    schedBadge.textContent = "Disabled";
+                    schedCountdown.textContent = "Auto schedule disabled";
                 } else if (isPaused) {
                     schedBadge.className = "badge badge-warning";
-                    schedBadge.textContent = t("diagStatusPaused");
-                    schedCountdown.innerHTML = "<span style=\"color:var(--accent-yellow-text); font-weight:600;\">" + t("schedulePaused") + "</span>";
+                    schedBadge.textContent = "Paused";
+                    schedCountdown.textContent = "Auto schedule paused";
                 } else if (isSleeping) {
                     schedBadge.className = "badge badge-predicted";
-                    schedBadge.textContent = t("diagStatusSleeping");
-                    schedCountdown.innerHTML = "<span style=\"color:var(--accent-purple-text); font-weight:600;\">" + t("scheduleSleeping") + "</span>";
+                    schedBadge.textContent = "Sleeping";
+                    schedCountdown.textContent = "Outside the schedule window";
                 } else {
                     schedBadge.className = "badge badge-success";
-                    schedBadge.textContent = t("diagStatusRunning");
-                    schedCountdown.innerHTML = (currentLang === "zh-CN" ? "下次运行: " : "Next run: ") + "<span class=\"meter-countdown\" data-scheduler-countdown=\"" + (nextRunAt || "") + "\">" + nextStr + "</span>";
+                    schedBadge.textContent = "Running";
+                    schedCountdown.innerHTML = "Next run in <span class=\"meter-countdown\" data-scheduler-countdown=\"" + (nextRunAt || "") + "\">" + nextStr + "</span>";
                 }
                 schedInterval.textContent = sched.interval || "-";
             }
 
-            // --- 2. KPI Card 2: 429 Cooldowns ---
+            // --- 2. 429 cooldowns ---
             var cooldowns = (latestDiagnostics.active_cooldowns || []).slice();
             var cdBadge = document.getElementById("diagCooldownBadge");
             var cdCount = document.getElementById("diagCooldownCount");
             var cdSub = document.getElementById("diagCooldownSub");
             if (cdBadge && cdCount && cdSub) {
+                cdCount.textContent = String(cooldowns.length);
                 if (cooldowns.length === 0) {
                     cdBadge.className = "badge badge-success";
-                    cdBadge.textContent = t("diagHealthy");
-                    cdCount.textContent = "0";
-                    cdCount.style.color = "var(--text-primary)";
-                    cdSub.textContent = t("diagCooldownSubText");
+                    cdBadge.textContent = "Healthy";
+                    cdSub.textContent = "Auto demotion to -1 ready";
                 } else {
                     cdBadge.className = "badge badge-danger";
-                    cdBadge.textContent = t("diagTripped");
-                    cdCount.textContent = cooldowns.length + " " + t("diagCoolingDownCount");
-                    cdCount.style.color = "var(--accent-red-text)";
-                    cdSub.textContent = (currentLang === "zh-CN" ? "已自动降权至 -1 保护中" : "Demoted to -1 for protection");
+                    cdBadge.textContent = "Cooling down";
+                    cdSub.textContent = cooldowns.length + (cooldowns.length === 1 ? " credential" : " credentials") + " demoted to -1 for protection";
                 }
             }
 
-            // --- 3. KPI Card 3: Latest Apply Health ---
-			var latestApply = latestDiagnostics.latest_apply || null;
-			var succ = latestApply ? (latestApply.succeeded || 0) : 0;
-			var fail = latestApply ? (latestApply.failed || 0) : 0;
-			var skip = latestApply ? (latestApply.skipped || 0) : 0;
-			var attempted = latestApply ? (latestApply.attempted || 0) : 0;
+            // --- 3. Latest apply health ---
+            var latestApply = latestDiagnostics.latest_apply || null;
+            var succ = latestApply ? (latestApply.succeeded || 0) : 0;
+            var fail = latestApply ? (latestApply.failed || 0) : 0;
+            var skip = latestApply ? (latestApply.skipped || 0) : 0;
+            var attempted = latestApply ? (latestApply.attempted || 0) : 0;
             var lastRunTime = (latestApply && latestApply.at) || null;
 
             var applyBadge = document.getElementById("diagApplyBadge");
             var applyStats = document.getElementById("diagApplyStats");
             var applyTime = document.getElementById("diagApplyTime");
             if (applyBadge && applyStats && applyTime) {
+                applyTime.textContent = lastRunTime ? formatDateTime(lastRunTime) : "No execution records yet";
                 if (!lastRunTime && (attempted === 0 && succ === 0 && fail === 0 && skip === 0)) {
                     applyBadge.className = "badge badge-subtle";
-                    applyBadge.textContent = t("diagNoLastRun");
+                    applyBadge.textContent = "No runs";
                     applyStats.textContent = "-";
-                    applyTime.textContent = t("diagNoLastRun");
                 } else if (fail > 0) {
                     applyBadge.className = "badge badge-danger";
-                    applyBadge.textContent = t("diagHasFailed");
-                    applyStats.textContent = succ + " " + t("diagSuccessPill") + " · " + fail + " " + t("diagFailedPill");
-                    applyTime.textContent = lastRunTime ? new Date(lastRunTime).toLocaleString(currentLang === "zh-CN" ? "zh-CN" : "en-US") : "-";
+                    applyBadge.textContent = "Has failures";
+                    applyStats.textContent = succ + " ok · " + fail + " failed";
                 } else if (succ > 0) {
                     applyBadge.className = "badge badge-success";
-                    applyBadge.textContent = t("diagAllPassed");
-                    applyStats.textContent = succ + " " + t("diagSuccessPill") + " · " + skip + " " + t("diagSkippedPill");
-                    applyTime.textContent = lastRunTime ? new Date(lastRunTime).toLocaleString(currentLang === "zh-CN" ? "zh-CN" : "en-US") : "-";
+                    applyBadge.textContent = "All succeeded";
+                    applyStats.textContent = succ + " ok · " + skip + " skipped";
                 } else {
                     applyBadge.className = "badge badge-subtle";
-                    applyBadge.textContent = t("diagNoChanges");
-                    applyStats.textContent = skip + " " + t("diagSkippedPill");
-                    applyTime.textContent = lastRunTime ? new Date(lastRunTime).toLocaleString(currentLang === "zh-CN" ? "zh-CN" : "en-US") : "-";
+                    applyBadge.textContent = "No changes";
+                    applyStats.textContent = skip + " skipped";
                 }
             }
 
-            // --- 4. Section 1: Scheduling Details & Window Panel ---
+            // --- 4. Scheduling details & window ---
             var detInterval = document.getElementById("diagSchedDetailInterval");
             var detWorker = document.getElementById("diagSchedDetailWorker");
             var detLastRun = document.getElementById("diagSchedDetailLastRun");
@@ -156,60 +143,55 @@ const templateScriptDiagnostics = `        let latestDiagnostics = null;
 
             if (detInterval) detInterval.textContent = sched.interval || "-";
             if (detWorker) {
-                var workerActive = Boolean(sched.worker_active);
-                detWorker.innerHTML = workerActive
-                    ? "<span class=\"badge badge-success\" style=\"font-size:11px;\">" + t("diagWorkerActive") + "</span>"
-                    : "<span class=\"badge badge-subtle\" style=\"font-size:11px;\">" + t("diagWorkerInactive") + "</span>";
+                detWorker.innerHTML = sched.worker_active
+                    ? "<span class=\"badge badge-success\">Active</span>"
+                    : "<span class=\"badge badge-subtle\">Inactive</span>";
             }
             if (detLastRun) {
-                detLastRun.textContent = sched.last_auto_apply_at ? new Date(sched.last_auto_apply_at).toLocaleString(currentLang === "zh-CN" ? "zh-CN" : "en-US") : t("diagNoLastRun");
+                var lastRun = formatDateTime(sched.last_auto_apply_at);
+                detLastRun.textContent = lastRun === "-" ? "No execution records yet" : lastRun;
             }
-            if (detNextRun) {
-                detNextRun.textContent = sched.next_run_at ? new Date(sched.next_run_at).toLocaleString(currentLang === "zh-CN" ? "zh-CN" : "en-US") : "-";
-            }
+            if (detNextRun) detNextRun.textContent = formatDateTime(sched.next_run_at);
             if (detWinText && detWinBadge) {
                 if (!windowEnabled || !windowStart || !windowEnd) {
-                    detWinText.textContent = t("diagWindowContinuous");
+                    detWinText.textContent = "24/7 continuous scheduling";
                     detWinBadge.className = "badge badge-success";
                     detWinBadge.textContent = "24/7";
                 } else {
                     detWinText.textContent = windowStart + " - " + windowEnd;
                     if (isSleeping) {
                         detWinBadge.className = "badge badge-predicted";
-                        detWinBadge.textContent = t("diagWindowSleeping");
+                        detWinBadge.textContent = "Sleeping, schedule skipped";
                     } else {
                         detWinBadge.className = "badge badge-success";
-                        detWinBadge.textContent = t("diagWindowActive");
+                        detWinBadge.textContent = "In active window";
                     }
                 }
             }
 
-            // --- 5. Section 2: 429 Cooldown Content ---
+            // --- 5. 429 cooldown list ---
             var cdContent = document.getElementById("diagCooldownContent");
             if (cdContent) {
                 if (cooldowns.length === 0) {
-                    cdContent.innerHTML = "<div class=\"diag-cooldown-empty\">" +
-                        "<span>✅</span>" +
-                        "<span>" + t("diagCooldownEmptyText") + "</span>" +
-                    "</div>";
+                    cdContent.innerHTML = "<div class=\"default-notice\">" + ICONS.check + "<span>No credentials in 429 cooldown; all accounts are operating normally.</span></div>";
                 } else {
                     var html = "<div class=\"diag-cooldown-list\">";
                     cooldowns.forEach(function(c) {
                         var cdUntil = c.cooldown_until;
                         var cdCountdownStr = cdUntil ? formatCountdown(cdUntil) : "-";
-                        var groupTag = c.model_group ? "<span class=\"badge badge-subtle\" style=\"font-size:10px;\">" + escapeHTML(c.model_group) + "</span>" : "";
+                        var groupTag = c.model_group ? "<span class=\"badge badge-subtle\">" + escapeHTML(c.model_group) + "</span>" : "";
                         html += "<div class=\"diag-cooldown-item\">" +
-                            "<div style=\"display:flex; flex-direction:column; gap:4px; min-width:0;\">" +
-                                "<div style=\"display:flex; align-items:center; gap:6px;\">" +
-                                    "<strong style=\"font-size:13px; color:var(--text-primary);\">" + escapeHTML(c.email || "Credential") + "</strong>" +
+                            "<div class=\"diag-cooldown-who\">" +
+                                "<div class=\"diag-cooldown-name\">" +
+                                    "<span>" + escapeHTML(c.email || "Credential") + "</span>" +
                                     groupTag +
-                                    "<span class=\"badge badge-danger\" style=\"font-size:10px;\">429 Cooldown</span>" +
+                                    "<span class=\"badge badge-danger\">429 cooldown</span>" +
                                 "</div>" +
-                                "<div style=\"font-size:11.5px; color:var(--text-muted); font-family:monospace;\">" + escapeHTML(c.reason || "429 rate limit") + "</div>" +
+                                "<div class=\"diag-cooldown-reason\">" + escapeHTML(c.reason || "429 rate limit") + "</div>" +
                             "</div>" +
-                            "<div style=\"text-align:right; font-size:12px;\">" +
-                                "<div style=\"color:var(--text-muted); font-size:11px;\">" + t("diagRemainingSec") + "</div>" +
-                                "<strong class=\"meter-countdown\" data-cooldown-countdown=\"" + (cdUntil || "") + "\" style=\"font-family:monospace; color:var(--accent-yellow-text); font-size:13px;\">" + cdCountdownStr + "</strong>" +
+                            "<div class=\"diag-cooldown-timer\">" +
+                                "<span>Recovers in</span>" +
+                                "<span class=\"meter-countdown\" data-cooldown-countdown=\"" + (cdUntil || "") + "\">" + cdCountdownStr + "</span>" +
                             "</div>" +
                         "</div>";
                     });
@@ -218,23 +200,18 @@ const templateScriptDiagnostics = `        let latestDiagnostics = null;
                 }
             }
 
-            // --- 6. Section 3: Latest Audit & Metrics ---
+            // --- 6. Latest audit ---
             var auditText = document.getElementById("diagAuditText");
             var auditPills = document.getElementById("diagAuditPills");
             if (auditText) {
-				auditText.textContent = latestApply ? (latestApply.message || "-") : (currentLang === "zh-CN" ? "尚无 Apply 写入记录" : "No Apply write recorded yet");
+                auditText.textContent = latestApply ? (latestApply.message || "-") : "No Apply write recorded yet";
             }
             if (auditPills) {
-                var succCount = succ;
-                var failCount = fail;
-                var skipCount = skip;
-                var attCount = attempted;
-
                 auditPills.innerHTML =
-                    "<span class=\"badge badge-success\">" + succCount + " " + t("diagSuccessPill") + "</span>" +
-                    "<span class=\"badge badge-danger\">" + failCount + " " + t("diagFailedPill") + "</span>" +
-                    "<span class=\"badge badge-subtle\">" + skipCount + " " + t("diagSkippedPill") + "</span>" +
-                    "<span class=\"badge badge-subtle\" style=\"font-weight:700;\">" + attCount + " " + t("diagAttemptedPill") + "</span>";
+                    "<span class=\"badge badge-success\">" + succ + " succeeded</span>" +
+                    "<span class=\"badge" + (fail ? " badge-danger" : " badge-subtle") + "\">" + fail + " failed</span>" +
+                    "<span class=\"badge badge-subtle\">" + skip + " skipped</span>" +
+                    "<span class=\"badge\">" + attempted + " attempted</span>";
             }
         }
 
