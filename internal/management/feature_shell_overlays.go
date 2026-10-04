@@ -70,6 +70,22 @@ const templateStyleOverlays = `        /* Modals */
         .history-priority-value { display: flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-weight: 650; }
         .history-priority-value b { color: var(--text-tertiary); font-weight: 400; }
         .history-priority-reason { margin-top: 0.25rem; color: var(--text-tertiary); line-height: 1.25; }
+
+        /* The comparison needs ~760px as a table; below that each account
+           becomes a card with labelled cells instead of being clipped. */
+        @media (max-width: 820px) {
+            .modal.modal-history-comparison { width: 100%; }
+            .history-comparison-table { width: 100%; font-size: 0.7rem; }
+            .history-comparison-header { display: none; }
+            .history-comparison-row,
+            .history-comparison-quota-only .history-comparison-row { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 0.55rem 0.9rem; padding: 0.75rem 0.85rem; }
+            .history-comparison-header + .history-comparison-row { border-top: 0; }
+            .history-account-cell { grid-column: 1 / -1; overflow-wrap: anywhere; white-space: normal; font-size: 0.76rem; }
+            .history-priority-cell { grid-column: 1 / -1; }
+            .history-cell::before { content: attr(data-label); display: block; margin-bottom: 0.3rem; color: var(--text-tertiary); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+            .history-quota-values > div, .history-quota-meter { width: 100%; min-width: 0; }
+            .history-meter-track { min-width: 0; }
+        }
         .history-empty-cell { display: block; min-height: 1.1rem; }
 
         .sample-table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-raised); font-size: 0.7rem; text-align: left; }

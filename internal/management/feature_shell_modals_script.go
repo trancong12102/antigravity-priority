@@ -91,9 +91,9 @@ const templateScriptModals = `        const MANUAL_APPLY_RECHECK = "Confirm to f
                 var row = rows[key];
                 html += "<div class=\"history-comparison-row\">" +
                     "<div class=\"history-account-cell\">" + escapeHTML(row.email || "Credential") + "</div>" +
-                    "<div>" + historyQuotaCell(row.gemini) + "</div>" +
-                    "<div>" + historyQuotaCell(row.claude_gpt) + "</div>" +
-                    (includePriority ? "<div>" + historyPriorityCell(row.change) + "</div>" : "") +
+                    "<div class=\"history-cell\" data-label=\"Gemini quota\">" + historyQuotaCell(row.gemini) + "</div>" +
+                    "<div class=\"history-cell\" data-label=\"Claude/GPT quota\">" + historyQuotaCell(row.claude_gpt) + "</div>" +
+                    (includePriority ? "<div class=\"history-cell history-priority-cell\" data-label=\"Priority change\">" + historyPriorityCell(row.change) + "</div>" : "") +
                 "</div>";
             });
             list.innerHTML = html + "</div>";
