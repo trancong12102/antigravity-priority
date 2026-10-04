@@ -25,7 +25,7 @@ const managementPageShellMarkup = `
                 <div class="brand-mark small" aria-hidden="true">` + iconBrand + `</div>
                 <div class="brand-copy">
                     <strong>Antigravity Priority</strong>
-                    <small>CPA plugin · <span class="version-badge">v1.2.17-en.2</span></small>
+                    <small>CPA plugin · <span class="version-badge">v1.2.18-en.1</span></small>
                 </div>
             </div>
             <p class="topbar-context">Quota-aware priorities for Antigravity credentials</p>

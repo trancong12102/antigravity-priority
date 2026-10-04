@@ -10,11 +10,20 @@ const templateScriptOverviewActionsCore = `        let latestSnapshot = null;
                 return "Active";
             }
             var lower = reason.toLowerCase();
+            if (lower.indexOf("probe failed") >= 0 || lower.indexOf("probe invalid") >= 0) {
+                var prefix = lower.indexOf("probe invalid") >= 0 ? "Probe invalid: " : "Probe failed: ";
+                var detail = reason;
+                var colonIdx = reason.indexOf(":");
+                if (colonIdx >= 0) detail = reason.substring(colonIdx + 1).trim();
+                var histIdx = detail.indexOf("; historical:");
+                if (histIdx >= 0) detail = detail.substring(0, histIdx).trim();
+                return detail ? prefix + detail : "Probe failed";
+            }
+            if (lower.indexOf("cooldown") >= 0 || (lower.indexOf("429") >= 0 && lower.indexOf("status 429") < 0)) return "429 cooldown";
             if (lower.indexOf("boost") >= 0) return "Boosted";
             if (lower.indexOf("remaining positive") >= 0) return "Positive balance";
             if (lower.indexOf("weekly depleted") >= 0) return "Weekly depleted";
             if (lower.indexOf("short") >= 0 && lower.indexOf("depleted") >= 0) return "5h depleted";
-            if (lower.indexOf("429") >= 0 || lower.indexOf("cooldown") >= 0) return "429 cooldown";
             if (lower.indexOf("predicted") >= 0) return "Predicted";
             if (lower.indexOf("in sync") >= 0 || lower.indexOf("optimal") >= 0) return "In sync";
             if (lower.indexOf("disabled on host") >= 0) return "Disabled";
@@ -92,9 +101,22 @@ const templateScriptOverviewActionsCore = `        let latestSnapshot = null;
                 const groupSelect = document.getElementById("modelGroupSelect");
                 const modelGroup = groupSelect ? groupSelect.value : "gemini";
                 const url = RUN_PATH + "?mode=probe&antigravity_model_group=" + encodeURIComponent(modelGroup) + "&auth_index=" + encodeURIComponent(authIndex);
-                await apiFetch(url, { method: "POST" });
+                const data = await apiFetch(url, { method: "POST" });
                 await fetchSnapshot({ silent: true });
-                showToast("Credential quota updated", "success");
+                const outcomes = (data && Array.isArray(data.probe_outcomes)) ? data.probe_outcomes : [];
+                const outcome = outcomes.find(function(o) { return o && o.auth_index === authIndex && o.model_group === modelGroup; }) ||
+                    outcomes.find(function(o) { return o && o.auth_index === authIndex; }) || null;
+                if (!outcome) {
+                    showToast("No probe result for this credential", "error");
+                } else if (outcome.status === "success") {
+                    showToast("Credential quota updated", "success");
+                } else {
+                    let detail = outcome.error || "Probe unsuccessful";
+                    if (outcome.http_status_code && detail.indexOf(String(outcome.http_status_code)) < 0) {
+                        detail += " (HTTP " + outcome.http_status_code + ")";
+                    }
+                    showToast("Probe failed · " + detail, "error");
+                }
             } catch (err) {
                 showToast(err.message, "error");
             } finally {

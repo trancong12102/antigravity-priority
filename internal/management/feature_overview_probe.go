@@ -11,8 +11,14 @@ const templateScriptProbeSchedule = `        async function triggerProbe() {
                 var groupSelect = document.getElementById("modelGroupSelect");
                 var group = groupSelect ? groupSelect.value : "gemini";
                 var path = RUN_PATH + "?mode=probe&antigravity_model_group=" + encodeURIComponent(group);
-                await apiFetch(path, { method: "POST" });
-                showToast("Quota probe complete", "success");
+                var data = await apiFetch(path, { method: "POST" });
+                var outcomes = (data && Array.isArray(data.probe_outcomes)) ? data.probe_outcomes : [];
+                var failedCount = outcomes.filter(function(o) { return o && o.status !== "success" && o.model_group === group; }).length;
+                if (failedCount > 0) {
+                    showToast("Quota probe finished with " + failedCount + " failed credential" + (failedCount === 1 ? "" : "s"), "error");
+                } else {
+                    showToast("Quota probe complete", "success");
+                }
                 await refreshDashboard();
             } catch (err) {
                 showToast(err.message, "error");

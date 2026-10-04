@@ -6,10 +6,10 @@ const templateScriptOverviewRender = `        function quotaFillClass(percent) {
             return "meter-fill-healthy";
         }
 
-        function renderQuotaMeter(label, percent, resetAt) {
-            return "<div class=\"meter\">" +
+        function renderQuotaMeter(label, percent, resetAt, stale) {
+            return "<div class=\"meter" + (stale ? " meter-stale" : "") + "\">" +
                 "<div class=\"meter-label-row\">" +
-                    "<span>" + label + " <strong>" + percent + "%</strong></span>" +
+                    "<span>" + label + " <strong>" + percent + "%</strong>" + (stale ? " <span class=\"meter-stale-tag\" title=\"Not refreshed by the latest probe\">Historical</span>" : "") + "</span>" +
                     "<span class=\"meter-countdown\" data-reset-time=\"" + escapeHTML(resetAt) + "\">" + escapeHTML(formatCountdown(resetAt)) + "</span>" +
                 "</div>" +
                 "<div class=\"meter-track\"><div class=\"meter-fill " + quotaFillClass(percent) + "\" style=\"width: " + percent + "%\"></div></div>" +
@@ -120,17 +120,18 @@ const templateScriptOverviewRender = `        function quotaFillClass(percent) {
                     tagBadge = "<span class=\"badge badge-warning\">Target changed</span>";
                 }
 
+                const isCooldown = Boolean(item.reason && item.reason.indexOf("cooldown") >= 0);
                 const probeFailed = item.reason && (item.reason.indexOf("probe failed") >= 0 || item.reason.indexOf("probe invalid") >= 0);
                 const isManuallyDisabled = item.reason && item.reason.indexOf("disabled on host") >= 0;
                 let statusBadge = "<span class=\"badge badge-success\">Active</span>";
-                if (probeFailed) {
-                    statusBadge = "<span class=\"badge badge-warning\">Probe failed</span>";
+                if (isCooldown) {
+                    statusBadge = "<span class=\"badge badge-warning\">429 cooldown</span>";
+                } else if (probeFailed) {
+                    statusBadge = "<span class=\"badge badge-danger\">Probe failed</span>";
                 } else if (isManuallyDisabled) {
                     statusBadge = "<span class=\"badge badge-subtle\">Disabled</span>";
                 } else if (item.target && item.target.disabled) {
                     statusBadge = "<span class=\"badge badge-danger\">Weekly depleted</span>";
-                } else if (item.reason && item.reason.indexOf("429") >= 0) {
-                    statusBadge = "<span class=\"badge badge-warning\">429 cooldown</span>";
                 } else if (isBoosted) {
                     statusBadge = "<span class=\"badge badge-boost\">Boosted</span>";
                 }
@@ -153,8 +154,8 @@ const templateScriptOverviewRender = `        function quotaFillClass(percent) {
                         "</div>" +
                     "</div>" +
                     "<div class=\"cred-meters\">" +
-                        renderQuotaMeter("5h window", r5hPercent, item.short_window_reset_at) +
-                        renderQuotaMeter("7d window", r7dPercent, item.long_window_reset_at) +
+                        renderQuotaMeter("5h window", r5hPercent, item.short_window_reset_at, item.evidence_fresh === false) +
+                        renderQuotaMeter("7d window", r7dPercent, item.long_window_reset_at, item.evidence_fresh === false) +
                     "</div>" +
                     "<div class=\"cred-priority\">" +
                         "<div class=\"priority-score-box\">" +

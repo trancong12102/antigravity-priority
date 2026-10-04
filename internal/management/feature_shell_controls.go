@@ -169,6 +169,8 @@ const templateStyleControls = `        /* Controls */
         .meter { display: grid; gap: 0.32rem; }
         .meter-label-row { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; color: var(--text-secondary); font-size: 0.66rem; font-weight: 600; }
         .meter-label-row strong { color: var(--text); font-family: var(--mono); font-weight: 540; }
+        .meter-stale { opacity: 0.72; }
+        .meter-stale-tag { display: inline-block; margin-left: 0.3rem; padding: 0 0.32rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-subtle); color: var(--text-tertiary); font-family: inherit; font-size: 0.6rem; font-weight: 560; line-height: 1.35; vertical-align: middle; }
         .meter-track {
             height: 0.42rem;
             overflow: hidden;

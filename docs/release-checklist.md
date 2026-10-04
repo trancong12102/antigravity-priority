@@ -39,7 +39,7 @@ Public, user-facing docs should stay clear and professional and **focus on core 
 | Document | Review focus | Checks |
 | :--- | :--- | :--- |
 | **`README.md`** | Feature overview, minimal config, management API | - Focused on core features, no pile of small implementation details;<br>- English-only, no Chinese text;<br>- **No internal `(REQ-xx)` tags**;<br>- Config docs reflect the "minimal YAML + web config center" model;<br>- API list stays in sync with route changes. |
-| **`.github/release-notes/vX.Y.Z.md`** | English release note | - English-only, a single English body with no Chinese section (follow `TEMPLATE.md`);<br>- Organize core feature upgrades, performance improvements, and UX improvements by module;<br>- **No internal `(REQ-xx)` tags**. |
+| **`.github/release-notes/vX.Y.Z.md`** | English release note | - **Must cover every commit in `git log <last-tag>..HEAD`; never drop intermediate commits**;<br>- English-only, a single English body with no Chinese section (follow `TEMPLATE.md`);<br>- Organize core feature upgrades, performance improvements, and UX improvements by module;<br>- **No internal `(REQ-xx)` tags**. |
 | **`docs/requirements/`** | Requirements and technical spec roadmap | - Update status from `Ready` to `Completed`;<br>- Covers requirement specs, domain model, and architecture design (internal docs may keep REQ numbers). |
 
 ---
@@ -109,7 +109,8 @@ go test -race ./...
 [1. Update related code and docs]
    ├─ Update business code and unit tests (TDD)
    ├─ Check version consistency (registry.json, runtime.go, feature_shell_assets.go)
-   ├─ Write .github/release-notes/vX.Y.Z.md (English-only, no REQ tags, core features)
+   ├─ Review every commit since the last release: git log <last-tag>..HEAD --oneline
+   ├─ Write .github/release-notes/vX.Y.Z.md (from the full git log range, English-only, no REQ tags)
    └─ Update README.md (concise, no pile of technical details)
          │
          ▼

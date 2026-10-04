@@ -46,9 +46,14 @@ Before each version iteration, after finishing a change, and before asking the u
 
 Check the following against that document:
 1. **Four-way version consistency**: The version in `registry.json`, `internal/runtime/runtime.go`, `internal/management/feature_shell_assets.go`, and `.github/release-notes/vX.Y.Z.md` must match exactly.
-2. **Public docs (this fork)**: `README.md`, release notes, and the UI are English-only, with no Chinese text. Keep docs focused on core value; **never put internal `(REQ-xx)` tags in user-facing docs or release notes**.
-3. **Architecture and metadata contracts**: Keep the CPA host `config.yaml` minimal, make sure `buildMetadata()` exposes no extra drawer fields, and keep `config.Default()` as the baseline fallback, consistent with the UI config center.
-4. **Full quality verification**: After each feature or bug fix, run `golangci-lint v2.12.2` (same version as the release workflow) first, then `go test ./...`. Before committing or releasing, run `golangci-lint run --timeout=5m` again, plus `go build ./...`, `go vet ./...`, `go test -v ./...`, and `go test -race ./...`, with zero warnings and zero data races.
+2. **Public docs (this fork)**: `README.md`, release notes, and the UI are English-only, with no Chinese text. Keep docs focused on core value; **never put internal `(REQ-xx)` tags in user-facing docs or release notes**. Every release note draft starts from `git log <last-tag>..HEAD --oneline`, covering every commit since the previous release.
+3. **Git history tracing (full coverage)**: never draft release notes from memory or from a single task. First run
+   ```bash
+   git log <last-release-tag>..HEAD --oneline
+   ```
+   and check every commit since the previous tag, so all features and fixes in that range (theme work, scheduling changes, style fixes and so on) make it into the notes.
+4. **Architecture and metadata contracts**: Keep the CPA host `config.yaml` minimal, make sure `buildMetadata()` exposes no extra drawer fields, and keep `config.Default()` as the baseline fallback, consistent with the UI config center.
+5. **Full quality verification**: After each feature or bug fix, run `golangci-lint v2.12.2` (same version as the release workflow) first, then `go test ./...`. Before committing or releasing, run `golangci-lint run --timeout=5m` again, plus `go build ./...`, `go vet ./...`, `go test -v ./...`, and `go test -race ./...`, with zero warnings and zero data races.
 
 ---
 

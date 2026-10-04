@@ -771,3 +771,170 @@ func TestHistoryComparisonStacksOnNarrowScreens(t *testing.T) {
 		}
 	}
 }
+func TestProbeOutcomeToastAndRenderFailureTruth(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not available; probe outcome behavior is checked in the Node-enabled verification environment")
+	}
+
+	harness := templateScriptOverviewActionsCore + templateScriptOverviewRender + templateScriptProbeSchedule + `
+const toastCalls = [];
+function element(initial) {
+    return Object.assign({
+        hidden: false,
+        disabled: false,
+        textContent: "",
+        innerHTML: "",
+        children: [],
+        attributes: {},
+        dataset: {},
+        style: {},
+        classList: {
+            classes: [],
+            add: function(c) { this.classes.push(c); },
+            remove: function(c) { this.classes = this.classes.filter(x => x !== c); },
+            contains: function(c) { return this.classes.includes(c); },
+            toggle: function(c, on) { if (on) this.add(c); else this.remove(c); }
+        },
+        appendChild: function(child) { this.children.push(child); },
+        setAttribute: function(k, v) { this.attributes[k] = v; },
+        getAttribute: function(k) { return this.attributes[k] || null; },
+        querySelector: function() { return null; },
+        querySelectorAll: function() { return []; },
+        addEventListener: function() {}
+    }, initial || {});
+}
+
+const elements = {
+    modelGroupSelect: element({value: "gemini"}),
+    valLastAudit: element(),
+    valNextProbe: element(),
+    valTotalCreds: element(),
+    valTotalDesc: element(),
+    valBoosted: element(),
+    valDepleted: element(),
+    credentialsContainer: element(),
+    btnProbe: element()
+};
+
+const document = {
+    getElementById: function(id) { return elements[id] || null; },
+    createElement: function(tag) { return element({tagName: tag}); },
+    querySelector: function() { return null; },
+    querySelectorAll: function() { return []; }
+};
+
+function showToast(msg, type) { toastCalls.push({msg: msg, type: type}); }
+function escapeHTML(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+function formatCountdown() { return "01h 00m"; }
+const ICONS = new Proxy({}, { get: function() { return ""; } });
+
+dynamicConfig = { auto_apply: false, antigravity_model_group: "gemini" };
+latestDiagnostics = { latest_audit: "test audit" };
+scheduleConfig = null;
+isAuthBlocked = false;
+userSelectedModelGroup = false;
+const RUN_PATH = "/run";
+const SNAPSHOT_PATH = "/snapshot/latest";
+const DIAGNOSTICS_PATH = "/diagnostics";
+
+async function apiFetch(path) {
+    if (path.indexOf("mode=probe") >= 0) {
+        return {
+            attempted: 0,
+            succeeded: 0,
+            probe_outcomes: [
+                {
+                    auth_index: "fail-403",
+                    model_group: "gemini",
+                    status: "failed",
+                    error: "retrieve quota summary status 403",
+                    http_status_code: 403
+                }
+            ]
+        };
+    }
+    return {};
+}
+
+async function fetchSnapshot() {}
+async function fetchDiagnostics() {}
+async function refreshDashboard() {}
+function isAutoApplyEnabled() { return false; }
+
+(async function() {
+    // 1. A failed single-credential probe must surface as an error with its HTTP status.
+    const label = element({textContent: "Probe"});
+    const probeBtn = element({querySelector: function() { return label; }});
+    await probeSingleCredential("fail-403", probeBtn);
+    if (toastCalls.length !== 1) throw new Error("expected exactly 1 toast, got " + toastCalls.length);
+    if (toastCalls[0].type !== "error") throw new Error("expected error toast for failed probe, got: " + toastCalls[0].type);
+    if (toastCalls[0].msg.indexOf("403") < 0 || toastCalls[0].msg.indexOf("Probe failed") < 0) {
+        throw new Error("expected toast to mention Probe failed and 403, got: " + toastCalls[0].msg);
+    }
+
+    // 2. Card rendering for a failed probe and for a 429 cooldown.
+    latestSnapshot = {
+        active_model_group: "gemini",
+        groups: {
+            gemini: {
+                items: [
+                    {
+                        auth_index: "fail-403",
+                        email: "test-403@example.com",
+                        reason: "probe failed: retrieve quota summary status 403; historical: fresh remaining positive",
+                        evidence_fresh: false,
+                        current: { priority: 99, disabled: false },
+                        target: { priority: 99, disabled: false },
+                        r5h: 1.0,
+                        r7d: 1.0,
+                        urgency: 0.98,
+                        cycle_burn_rate: 0.16
+                    },
+                    {
+                        auth_index: "cooldown-429",
+                        email: "test-429@example.com",
+                        reason: "probe failed: retrieve quota summary status 429; historical: 429 rate limit cooldown",
+                        evidence_fresh: false,
+                        current: { priority: -1, disabled: false },
+                        target: { priority: -1, disabled: false },
+                        r5h: 0.8,
+                        r7d: 0.9,
+                        urgency: 1.1,
+                        cycle_burn_rate: 0.15
+                    }
+                ]
+            }
+        }
+    };
+
+    renderDashboard();
+
+    const renderedCards = elements.credentialsContainer.children;
+    if (renderedCards.length !== 2) throw new Error("expected 2 rendered cards, got " + renderedCards.length);
+
+    const card0HTML = renderedCards[0].innerHTML;
+    if (card0HTML.indexOf("badge-danger\">Probe failed") < 0) throw new Error("card 0 should have a badge-danger 'Probe failed': " + card0HTML);
+    if (card0HTML.indexOf("Positive balance") >= 0) throw new Error("card 0 must NOT show 'Positive balance' when the probe failed");
+    if (card0HTML.indexOf("Probe failed: retrieve quota summary status 403") < 0) throw new Error("card 0 should show the probe failure detail: " + card0HTML);
+    if (card0HTML.indexOf("meter-stale") < 0 || card0HTML.indexOf("Historical") < 0) throw new Error("card 0 should mark non-fresh meters as Historical: " + card0HTML);
+
+    const card1HTML = renderedCards[1].innerHTML;
+    if (card1HTML.indexOf("badge-warning\">429 cooldown") < 0) throw new Error("card 1 should prioritise the '429 cooldown' badge over probe failed: " + card1HTML);
+    if (card1HTML.indexOf("Probe failed: retrieve quota summary status 429") < 0) throw new Error("card 1 reason line should show the failure cause: " + card1HTML);
+
+    // 3. A batch probe with failures reports how many failed.
+    await triggerProbe();
+    if (typeof probeCooldownTimer !== "undefined") clearInterval(probeCooldownTimer);
+    const lastToast = toastCalls[toastCalls.length - 1];
+    if (lastToast.type !== "error" || lastToast.msg.indexOf("Quota probe finished with 1 failed credential") < 0) {
+        throw new Error("expected batch probe failure toast, got: " + JSON.stringify(lastToast));
+    }
+})().catch(function(err) {
+    console.error(err.stack || err.message);
+    process.exit(1);
+});
+`
+
+	runNodeFixture(t, node, "probe-outcome-truth.js", harness)
+}

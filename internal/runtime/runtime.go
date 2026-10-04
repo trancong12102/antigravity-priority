@@ -31,34 +31,35 @@ type quotaPreview struct {
 
 // Runtime manages plugin lifecycle, configuration, ticker worker, and single-flight execution.
 type Runtime struct {
-	mu                 sync.Mutex
-	runMu              sync.Mutex
-	tickerFactory      TickerFactory
-	runner             TaskRunner
-	rootCtx            context.Context
-	cancel             context.CancelFunc
-	cfg                config.Config
-	hostCallbacks      host.HostCallbacks
-	clock              Clock
-	sleeper            Sleeper
-	management         *management.Handler
-	latestResult       apply.Result
-	latestAudit        string
-	latestDualSnapshot *apply.DualGroupSnapshot
-	latestQuotaPreview *quotaPreview
-	scheduleConfig     state.ScheduleConfig
-	stateCacheOverride string
-	runHistory         []RunHistoryEntry
-	lastAutoApplyAt    time.Time
-	worker             *tickerWorker
-	shutdown           bool
-	rateLimitMu        sync.Mutex
-	pending429         map[string]pending429
-	stormUntil         time.Time
-	stormAccounts      map[string]bool
-	activeCooldowns    map[string]state.CooldownEntry
-	rateLimitWake      chan struct{}
-	rateLimitDone      chan struct{}
+	mu                  sync.Mutex
+	runMu               sync.Mutex
+	tickerFactory       TickerFactory
+	runner              TaskRunner
+	rootCtx             context.Context
+	cancel              context.CancelFunc
+	cfg                 config.Config
+	hostCallbacks       host.HostCallbacks
+	clock               Clock
+	sleeper             Sleeper
+	management          *management.Handler
+	latestResult        apply.Result
+	latestAudit         string
+	latestDualSnapshot  *apply.DualGroupSnapshot
+	latestQuotaPreview  *quotaPreview
+	scheduleConfig      state.ScheduleConfig
+	stateCacheOverride  string
+	runHistory          []RunHistoryEntry
+	latestProbeOutcomes []management.ProbeOutcome
+	lastAutoApplyAt     time.Time
+	worker              *tickerWorker
+	shutdown            bool
+	rateLimitMu         sync.Mutex
+	pending429          map[string]pending429
+	stormUntil          time.Time
+	stormAccounts       map[string]bool
+	activeCooldowns     map[string]state.CooldownEntry
+	rateLimitWake       chan struct{}
+	rateLimitDone       chan struct{}
 }
 
 // New creates an initialized Runtime instance.
@@ -859,6 +860,25 @@ func (r *Runtime) clearQuotaPreview() {
 	r.latestQuotaPreview = nil
 	r.mu.Unlock()
 }
+func (r *Runtime) setLastProbeOutcomes(outcomes []management.ProbeOutcome) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if outcomes == nil {
+		r.latestProbeOutcomes = nil
+		return
+	}
+	r.latestProbeOutcomes = append([]management.ProbeOutcome(nil), outcomes...)
+}
+
+// LastProbeOutcomes returns the probe outcomes from the most recent probe execution.
+func (r *Runtime) LastProbeOutcomes(ctx context.Context) []management.ProbeOutcome {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.latestProbeOutcomes) == 0 {
+		return nil
+	}
+	return append([]management.ProbeOutcome(nil), r.latestProbeOutcomes...)
+}
 
 func cloneQuotaPreview(preview quotaPreview) quotaPreview {
 	cloned := preview
@@ -1304,7 +1324,7 @@ func redactRuntimeIdentifier(value string) string {
 func buildMetadata() Metadata {
 	return Metadata{
 		Name:             "Antigravity Priority",
-		Version:          "1.2.17-en.2",
+		Version:          "1.2.18-en.1",
 		Author:           "ygq-future",
 		GitHubRepository: "https://github.com/ygq-future/antigravity-priority",
 		Description:      "Intelligent quota pacing and adaptive burn-rate priority scheduler exclusively for Google Antigravity in CLIProxyAPI.",
