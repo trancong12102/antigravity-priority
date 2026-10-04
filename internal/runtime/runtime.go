@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -1076,11 +1077,77 @@ func isAntigravityUsageProvider(provider string) bool {
 }
 
 func is429UsageFailure(failure usageFailure) bool {
-	if failure.StatusCode == 429 {
+	return isRateLimitFailure(failure.StatusCode, failure.Body)
+}
+
+// isRateLimitFailure accepts only real rate-limit signals: HTTP 429, or a
+// structured error object whose code, status, type or detail reason says
+// RESOURCE_EXHAUSTED / rate limit. Free text that merely mentions "429" (a
+// token count, a request id, a quoted prompt) does not count.
+func isRateLimitFailure(statusCode int, body string) bool {
+	if statusCode == http.StatusTooManyRequests {
 		return true
 	}
-	body := strings.ToUpper(failure.Body)
-	return strings.Contains(body, "429") || strings.Contains(body, "RESOURCE_EXHAUSTED") || strings.Contains(body, "RATE_LIMIT")
+	var decoded any
+	if !decodeEmbeddedJSON(body, &decoded) {
+		return false
+	}
+	return hasRateLimitError(decoded)
+}
+
+// decodeEmbeddedJSON parses body as JSON, or failing that the JSON that
+// follows a textual prefix such as "upstream error: {...}".
+func decodeEmbeddedJSON(body string, target *any) bool {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return false
+	}
+	if json.Unmarshal([]byte(body), target) == nil {
+		return true
+	}
+	start := strings.IndexAny(body, "{[")
+	if start <= 0 {
+		return false
+	}
+	return json.Unmarshal([]byte(body[start:]), target) == nil
+}
+
+func hasRateLimitError(value any) bool {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			if hasRateLimitError(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		if nested, ok := typed["error"]; ok {
+			return hasRateLimitError(nested)
+		}
+		if code, ok := typed["code"].(float64); ok && int(code) == http.StatusTooManyRequests {
+			return true
+		}
+		for _, key := range []string{"code", "status", "type", "reason"} {
+			if text, ok := typed[key].(string); ok && isRateLimitCode(text) {
+				return true
+			}
+		}
+		if details, ok := typed["details"].([]any); ok {
+			for _, detail := range details {
+				if object, ok := detail.(map[string]any); ok {
+					if reason, ok := object["reason"].(string); ok && isRateLimitCode(reason) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func isRateLimitCode(code string) bool {
+	normalized := strings.ToUpper(strings.TrimSpace(code))
+	return normalized == "RESOURCE_EXHAUSTED" || strings.Contains(normalized, "RATE_LIMIT")
 }
 
 func (r *Runtime) handleFilterEvent(ctx context.Context, raw []byte) []byte {
@@ -1097,11 +1164,7 @@ func (r *Runtime) handleFilterEvent(ctx context.Context, raw []byte) []byte {
 		return mustMarshal(Envelope{OK: true})
 	}
 
-	is429 := payload.StatusCode == 429 || strings.Contains(strings.ToLower(payload.Error), "429") ||
-		strings.Contains(strings.ToUpper(payload.Error), "RESOURCE_EXHAUSTED") ||
-		strings.Contains(strings.ToUpper(payload.Error), "RATE_LIMIT")
-
-	if is429 {
+	if isRateLimitFailure(payload.StatusCode, payload.Error) {
 		err := r.observe429(ctx, authIndex, payload.ModelGroup, "429 rate limit detected", true)
 		if err != nil {
 			return failure(err)

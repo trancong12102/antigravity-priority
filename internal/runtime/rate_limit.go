@@ -14,7 +14,7 @@ import (
 
 const (
 	rateLimitStormWindow = 30 * time.Second
-	rateLimitPendingTTL   = 24 * time.Hour
+	rateLimitPendingTTL  = 24 * time.Hour
 )
 
 type pending429 struct {
@@ -27,6 +27,12 @@ type pending429 struct {
 }
 
 func (r *Runtime) observe429(ctx context.Context, authIndex, modelGroup, reason string, acquireRunLock bool) error {
+	// A disabled plugin must not demote credentials. auto_apply is not
+	// consulted: it only governs the periodic scheduler, and the reactive
+	// cooldown is documented as a separate, always-on circuit breaker.
+	if cfg, err := r.Config(); err != nil || !cfg.Enabled {
+		return nil
+	}
 	now := r.clock.Now().UTC()
 	r.rateLimitMu.Lock()
 	if _, active := r.activeCooldowns[authIndex]; active {
