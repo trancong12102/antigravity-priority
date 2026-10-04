@@ -1,7 +1,7 @@
 package management
 
 const templateScriptShellCore = `        const LANG_STORAGE_KEY = "antigravity_priority_lang";
-        let currentLang = "zh-CN";
+        let currentLang = "en-US";
         try {
             const savedLang = localStorage.getItem(LANG_STORAGE_KEY);
             if (savedLang === "zh-CN" || savedLang === "en-US") {
