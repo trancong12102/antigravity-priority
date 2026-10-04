@@ -73,13 +73,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"unsafe"
 
 	"antigravity-priority/internal/host"
 	pluginruntime "antigravity-priority/internal/runtime"
 )
 
-var cpaRuntime = pluginruntime.New(pluginruntime.Options{Host: hostCallbackAdapter{}})
+// cpaRuntime stays nil until cliproxy_plugin_init: creating it loads and
+// rewrites the state cache and starts a worker goroutine, none of which may
+// happen merely because the library was loaded.
+var cpaRuntime atomic.Pointer[pluginruntime.Runtime]
 
 func main() {}
 
@@ -89,9 +93,25 @@ func cliproxy_plugin_init(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_a
 		return -1
 	}
 	C.store_antigravity_priority_host_api(host)
-	cpaRuntime = pluginruntime.New(pluginruntime.Options{Host: hostCallbackAdapter{}})
+	initRuntime(pluginruntime.Options{Host: hostCallbackAdapter{}})
 	C.set_antigravity_priority_plugin_api(plugin)
 	return 0
+}
+
+// initRuntime installs a fresh Runtime and shuts down any previous one, so a
+// repeated init never leaves an orphaned worker behind.
+func initRuntime(options pluginruntime.Options) {
+	if previous := cpaRuntime.Swap(pluginruntime.New(options)); previous != nil {
+		_ = previous.Shutdown(context.Background())
+	}
+}
+
+func handlePluginCall(method string, request []byte) []byte {
+	rt := cpaRuntime.Load()
+	if rt == nil {
+		return []byte(`{"ok":false,"error":{"code":"not_initialized","message":"plugin is not initialized","retryable":false}}`)
+	}
+	return rt.Handle(context.Background(), method, request)
 }
 
 //export antigravityPriorityPluginCall
@@ -107,7 +127,7 @@ func antigravityPriorityPluginCall(method *C.char, request *C.uint8_t, requestLe
 	if !ok {
 		return writeResponse(response, []byte(`{"ok":false,"error":{"code":"invalid_request","message":"request length is invalid","retryable":false}}`))
 	}
-	return writeResponse(response, cpaRuntime.Handle(context.Background(), methodName, requestBytes))
+	return writeResponse(response, handlePluginCall(methodName, requestBytes))
 }
 
 //export antigravityPriorityPluginFreeBuffer
@@ -118,7 +138,9 @@ func antigravityPriorityPluginFreeBuffer(ptr unsafe.Pointer, length C.size_t) {
 
 //export antigravityPriorityPluginShutdown
 func antigravityPriorityPluginShutdown() {
-	_ = cpaRuntime.Shutdown(context.Background())
+	if rt := cpaRuntime.Load(); rt != nil {
+		_ = rt.Shutdown(context.Background())
+	}
 }
 
 func copyRequestBytes(request *C.uint8_t, requestLen C.size_t) ([]byte, bool) {
