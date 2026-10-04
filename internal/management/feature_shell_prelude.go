@@ -13,7 +13,6 @@ const templateScriptPrelude = `
         const SAMPLES_PATH = BASE_PATH + "/samples";
 
         const CPAMC_AUTH_KEY = "cli-proxy-auth";
-        const CPAMC_THEME_KEY = "cli-proxy-theme";
         const OBFUSCATION_PREFIX = "enc::v1::";
         const OBFUSCATION_SALT = "cli-proxy-api-webui::secure-storage";
 

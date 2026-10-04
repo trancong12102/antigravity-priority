@@ -58,31 +58,6 @@ const templateScriptShellCore = `        let activeTab = "overview";
             document.getElementById("retrySessionButton").hidden = kind !== "error";
         }
 
-        function resolveCPAMCTheme() {
-            try {
-                if (window.self !== window.top) {
-                    const parentTheme = window.parent.document.documentElement.getAttribute("data-theme");
-                    return parentTheme === "dark" || parentTheme === "white" ? parentTheme : "light";
-                }
-            } catch (_) {}
-            try {
-                const persisted = JSON.parse(localStorage.getItem(CPAMC_THEME_KEY) || "null");
-                const theme = persisted && persisted.state ? persisted.state.theme : "";
-                if (theme === "dark" || theme === "white" || theme === "light") return theme;
-                if (theme === "auto") return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "white";
-            } catch (_) {}
-            return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "white";
-        }
-
-        function applyTheme(theme) {
-            if (theme === "light") document.documentElement.removeAttribute("data-theme");
-            else document.documentElement.setAttribute("data-theme", theme);
-        }
-
-        function syncTheme() {
-            applyTheme(resolveCPAMCTheme());
-        }
-
         // Console helper for the devserver and standalone debugging:
         // window.setTheme("light" | "white" | "dark")
         window.__setTheme = window.setTheme = function(theme) {
@@ -92,7 +67,6 @@ const templateScriptShellCore = `        let activeTab = "overview";
         };
 
         function initializeChrome() {
-            document.documentElement.classList.toggle("is-embedded", window.self !== window.top);
             syncTheme();
             try {
                 if (window.self !== window.top) {

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -85,7 +86,7 @@ func TestStatusHTML_EnglishOnly(t *testing.T) {
 
 	// Static markup must already be the final English text so nothing is
 	// swapped in after load.
-	markup := StatusHTML[:strings.Index(StatusHTML, "<script>")]
+	markup := StatusHTML[:strings.LastIndex(StatusHTML, "<script>")]
 	for _, text := range []string{
 		"Connecting to management session",
 		"Antigravity credentials",
@@ -638,14 +639,100 @@ func runNodeFixture(t *testing.T, node, filename, script string) {
 	}
 }
 
+// extractPageScript returns every inline script of the page in document order.
 func extractPageScript(t *testing.T) string {
 	t.Helper()
-	start := strings.Index(StatusHTML, "<script>")
-	end := strings.Index(StatusHTML, "</script>")
-	if start == -1 || end == -1 || end <= start+len("<script>") {
-		t.Fatal("assembled page does not contain one complete inline script")
+	var scripts strings.Builder
+	rest := StatusHTML
+	for {
+		start := strings.Index(rest, "<script>")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(rest[start:], "</script>")
+		if end == -1 {
+			t.Fatal("assembled page contains an unterminated inline script")
+		}
+		scripts.WriteString(rest[start+len("<script>") : start+end])
+		scripts.WriteString("\n")
+		rest = rest[start+end+len("</script>"):]
 	}
-	return StatusHTML[start+len("<script>") : end]
+	if scripts.Len() == 0 {
+		t.Fatal("assembled page does not contain an inline script")
+	}
+	return scripts.String()
+}
+
+func TestStatusHTML_ThemeResolvedBeforeFirstPaint(t *testing.T) {
+	head := StatusHTML[:strings.Index(StatusHTML, "<body>")]
+	themeScript := strings.Index(head, templateScriptThemeBootstrap)
+	if themeScript == -1 {
+		t.Fatal("the theme bootstrap script must be inside <head>")
+	}
+	if style := strings.Index(head, "<style>"); style == -1 || themeScript > style {
+		t.Fatal("the theme bootstrap script must run before the stylesheet")
+	}
+	if !strings.Contains(templateScriptThemeBootstrap, "\n        syncTheme();\n    </script>") {
+		t.Fatal("the theme bootstrap script must apply the theme immediately, not on a later event")
+	}
+}
+
+func TestThemeBootstrapAppliesCPAMCThemeSynchronously(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not available; theme bootstrap behavior is checked in the Node-enabled verification environment")
+	}
+	script := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(templateScriptThemeBootstrap), "<script>"), "</script>")
+	cases := []struct {
+		name, setup, want string
+	}{
+		{"stored dark theme", `store["cli-proxy-theme"] = JSON.stringify({state:{theme:"dark"}});`, "dark"},
+		{"stored white theme", `store["cli-proxy-theme"] = JSON.stringify({state:{theme:"white"}});`, "white"},
+		{"stored auto follows dark system", `store["cli-proxy-theme"] = JSON.stringify({state:{theme:"auto"}}); systemDark = true;`, "dark"},
+		{"no stored theme follows dark system", `systemDark = true;`, "dark"},
+		{"stored light theme", `store["cli-proxy-theme"] = JSON.stringify({state:{theme:"light"}});`, "null"},
+		{"dark CPAMC parent wins over storage", `store["cli-proxy-theme"] = JSON.stringify({state:{theme:"light"}}); parentTheme = "dark";`, "dark"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			harness := `
+const store = {};
+let systemDark = false;
+let parentTheme = undefined;
+const attributes = {};
+const classes = {};
+const documentElement = {
+    getAttribute: function(name) { return name in attributes ? attributes[name] : null; },
+    setAttribute: function(name, value) { attributes[name] = String(value); },
+    removeAttribute: function(name) { delete attributes[name]; },
+    classList: { toggle: function(name, on) { classes[name] = Boolean(on); } }
+};
+const document = { documentElement: documentElement };
+const localStorage = { getItem: function(name) { return name in store ? store[name] : null; } };
+const window = { matchMedia: function() { return { matches: systemDark }; } };
+` + tc.setup + `
+if (parentTheme !== undefined) {
+    window.self = window;
+    window.top = {};
+    window.parent = { document: { documentElement: { getAttribute: function() { return parentTheme; } } } };
+} else {
+    window.self = window;
+    window.top = window;
+}
+` + script + `
+const got = documentElement.getAttribute("data-theme");
+if (String(got) !== ` + strconv.Quote(tc.want) + `) {
+    console.error("data-theme = " + got + ", want ` + tc.want + `");
+    process.exit(1);
+}
+if (classes["is-embedded"] !== (parentTheme !== undefined)) {
+    console.error("is-embedded class not set before first paint");
+    process.exit(1);
+}
+`
+			runNodeFixture(t, node, "theme-bootstrap.js", harness)
+		})
+	}
 }
 
 func TestStatusHTML_CPAThemeAlignmentAndDevServerHelper(t *testing.T) {
@@ -667,6 +754,20 @@ func TestStatusHTML_CPAThemeAlignmentAndDevServerHelper(t *testing.T) {
 	for _, selector := range []string{`:root[data-theme="white"] {`, `:root[data-theme="dark"] {`} {
 		if !strings.Contains(StatusHTML, selector) {
 			t.Errorf("stylesheet is missing the CPAMC theme palette %s", selector)
+		}
+	}
+}
+
+func TestHistoryComparisonStacksOnNarrowScreens(t *testing.T) {
+	for _, snippet := range []string{
+		`data-label=\"Gemini quota\"`,
+		`data-label=\"Claude/GPT quota\"`,
+		`data-label=\"Priority change\"`,
+		`.history-comparison-header { display: none; }`,
+		`.history-cell::before { content: attr(data-label);`,
+	} {
+		if !strings.Contains(StatusHTML, snippet) {
+			t.Errorf("narrow history comparison layout is missing %q", snippet)
 		}
 	}
 }
