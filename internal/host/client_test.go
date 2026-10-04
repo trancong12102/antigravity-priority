@@ -174,3 +174,52 @@ func TestClient_HTTPDo(t *testing.T) {
 		t.Fatalf("unexpected redacted HTTP error: %v", err)
 	}
 }
+
+func TestClient_ReplaceAuth_RefusesWhenFileChangedSinceRead(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "auth.json")
+	if err := os.WriteFile(path, []byte(`{"access_token":"old","priority":10}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client := host.NewClient(&mockHostCallbacks{
+		getAuthFunc: func(context.Context, string) (host.AuthDocument, error) {
+			return host.AuthDocument{AuthIndex: "idx-1", Name: "credential", Path: path}, nil
+		},
+	})
+	doc, err := client.GetAuth(context.Background(), "idx-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshed := `{"access_token":"new","priority":10}`
+	if err := os.WriteFile(path, []byte(refreshed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err = client.ReplaceAuth(context.Background(), doc, json.RawMessage(`{"access_token":"old","priority":90}`))
+	if !errors.Is(err, host.ErrDocumentChanged) {
+		t.Fatalf("expected ErrDocumentChanged, got %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	if string(data) != refreshed {
+		t.Fatalf("stale replacement overwrote the refreshed document: %s", data)
+	}
+	if leftovers, _ := filepath.Glob(path + ".tmp-*"); len(leftovers) != 0 {
+		t.Fatalf("temp files left behind: %v", leftovers)
+	}
+}
+
+func TestClient_ReplaceAuth_AcceptsHostReencodedDocument(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "auth.json")
+	onDisk := "{\n  \"access_token\": \"a<b\",\n  \"expiry\": 1767225600000,\n  \"priority\": 10\n}\n"
+	if err := os.WriteFile(path, []byte(onDisk), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// CPA's RPC layer compacts and HTML-escapes the raw JSON it returns.
+	fromHost := host.AuthDocument{AuthIndex: "idx-1", Path: path, JSON: json.RawMessage(`{"access_token":"a<b","expiry":1767225600000,"priority":10}`)}
+	client := host.NewClient(&mockHostCallbacks{})
+	if err := client.ReplaceAuth(context.Background(), fromHost, json.RawMessage(`{"access_token":"a<b","expiry":1767225600000,"priority":90}`)); err != nil {
+		t.Fatalf("re-encoded but unchanged document was treated as changed: %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), `"priority":90`) {
+		t.Fatalf("replacement not written: %s", data)
+	}
+}

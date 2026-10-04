@@ -78,16 +78,29 @@ func (c *Client) SaveAuth(ctx context.Context, name string, doc json.RawMessage)
 	return nil
 }
 
-// ReplaceAuth replaces one complete credential document. When the host
-// exposes a physical path we use the same atomic file replacement primitive as
-// CPA's credential store; otherwise the host callback receives the complete
-// document in one save operation.
+// ReplaceAuth replaces one complete credential document that was computed
+// from document. When the host exposes a physical path the file is replaced
+// atomically, and only if it still holds document.JSON at the moment of the
+// rename; otherwise ErrDocumentChanged is returned so the caller can re-read
+// and re-apply its change. Without a path the host callback receives the
+// complete document in one save operation.
+//
+// host.auth.save is not used for file-backed credentials because CPA
+// implements it as a whole-document overwrite (os.WriteFile followed by an
+// in-memory replace) with no check against the version the plugin read. A
+// token refresh persisted between our read and that save would be lost on
+// disk and in memory alike, whereas the check here narrows the window to the
+// re-read and rename.
 func (c *Client) ReplaceAuth(ctx context.Context, document AuthDocument, doc json.RawMessage) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("replace auth context: %w", err)
 	}
 	if path := strings.TrimSpace(document.Path); path != "" {
-		if err := writeFileAtomic(ctx, path, doc); err != nil {
+		var base []byte
+		if len(document.JSON) > 0 {
+			base = document.JSON
+		}
+		if err := writeFileAtomic(ctx, path, doc, base); err != nil {
 			return fmt.Errorf("replace auth document: %w", err)
 		}
 		return nil

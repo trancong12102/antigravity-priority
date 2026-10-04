@@ -231,6 +231,10 @@ type HostTransition interface {
 	Execute(ctx context.Context, round TransitionRound) (TransitionRoundResult, error)
 }
 
+// maxDocumentAttempts bounds how often one intent is re-applied when the
+// credential document keeps changing underneath it.
+const maxDocumentAttempts = 3
+
 // Transitioner implements HostTransition using a complete-document store.
 type Transitioner struct {
 	store host.API
@@ -272,40 +276,51 @@ func (t *Transitioner) executeOne(ctx context.Context, intent TransitionIntent) 
 		return result.withOutcome(OutcomeFailed, ReasonContextCanceled, err)
 	}
 
-	document, err := t.store.GetAuth(ctx, intent.AuthIndex)
-	if err != nil {
-		return result.withOutcome(OutcomeFailed, reasonForReadError(ctx, err), err)
-	}
-	current, fields, err := decodeCredentialDocument(document)
-	if err != nil {
-		return result.withOutcome(OutcomeFailed, ReasonDecodeFailed, err)
-	}
-	result.Before = current.redacted()
-	if conflictReason := expectedConflict(intent.Expected, current); conflictReason != "" {
-		return result.withOutcome(OutcomeConflict, conflictReason, nil)
-	}
+	var changedErr error
+	for attempt := 0; attempt < maxDocumentAttempts; attempt++ {
+		document, err := t.store.GetAuth(ctx, intent.AuthIndex)
+		if err != nil {
+			return result.withOutcome(OutcomeFailed, reasonForReadError(ctx, err), err)
+		}
+		current, fields, err := decodeCredentialDocument(document)
+		if err != nil {
+			return result.withOutcome(OutcomeFailed, ReasonDecodeFailed, err)
+		}
+		result.Before = current.redacted()
+		if conflictReason := expectedConflict(intent.Expected, current); conflictReason != "" {
+			return result.withOutcome(OutcomeConflict, conflictReason, nil)
+		}
 
-	target, changed := applyTarget(current, fields, intent.Target)
-	result.Target = target.redacted()
-	result.PriorityAttempted = intent.Target.Priority.Operation != FieldUnchanged
-	result.DisabledAttempted = intent.Target.Disabled.Operation != FieldUnchanged
-	if !changed {
-		result.After = current.redacted()
-		return result.withOutcome(OutcomeNoChange, ReasonAlreadySatisfied, nil)
-	}
-	if err := ctx.Err(); err != nil {
-		return result.withOutcome(OutcomeFailed, ReasonContextCanceled, err)
-	}
+		target, changed := applyTarget(current, fields, intent.Target)
+		result.Target = target.redacted()
+		result.PriorityAttempted = intent.Target.Priority.Operation != FieldUnchanged
+		result.DisabledAttempted = intent.Target.Disabled.Operation != FieldUnchanged
+		if !changed {
+			result.After = current.redacted()
+			return result.withOutcome(OutcomeNoChange, ReasonAlreadySatisfied, nil)
+		}
+		if err := ctx.Err(); err != nil {
+			return result.withOutcome(OutcomeFailed, ReasonContextCanceled, err)
+		}
 
-	encoded, err := json.Marshal(fields)
-	if err != nil {
-		return result.withOutcome(OutcomeFailed, ReasonDecodeFailed, err)
+		encoded, err := json.Marshal(fields)
+		if err != nil {
+			return result.withOutcome(OutcomeFailed, ReasonDecodeFailed, err)
+		}
+		err = t.store.ReplaceAuth(ctx, document, encoded)
+		if errors.Is(err, host.ErrDocumentChanged) {
+			// CPA rewrote the file (typically a token refresh) after we read
+			// it; nothing was written, so re-read and re-apply our two fields
+			// onto the fresh document.
+			changedErr = err
+			continue
+		}
+		if err != nil {
+			return t.resolveAfterCommitError(ctx, intent, document, current, target, result, err)
+		}
+		return t.verifyCommitted(intent, document, target, result)
 	}
-	if err := t.store.ReplaceAuth(ctx, document, encoded); err != nil {
-		return t.resolveAfterCommitError(ctx, intent, document, current, target, result, err)
-	}
-
-	return t.verifyCommitted(intent, document, target, result)
+	return result.withOutcome(OutcomeFailed, ReasonCommitFailed, changedErr)
 }
 
 func (t *Transitioner) resolveAfterCommitError(ctx context.Context, intent TransitionIntent, document host.AuthDocument, before, target credentialDocumentState, result TransitionResult, commitErr error) TransitionResult {

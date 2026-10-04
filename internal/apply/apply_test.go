@@ -245,3 +245,89 @@ func mustJSON(t *testing.T, value any) []byte {
 	}
 	return data
 }
+
+// refreshingCallbacks serves one auth file through host callbacks and, on the
+// first read only, rewrites the file right after returning it, the way a CPA
+// OAuth token refresh can land between our read and our write.
+type refreshingCallbacks struct {
+	path      string
+	refreshed string
+	reads     int
+}
+
+func (c *refreshingCallbacks) GetAuth(_ context.Context, authIndex string) (host.AuthDocument, error) {
+	raw, err := os.ReadFile(c.path)
+	if err != nil {
+		return host.AuthDocument{}, err
+	}
+	c.reads++
+	if c.reads == 1 {
+		if err := os.WriteFile(c.path, []byte(c.refreshed), 0o600); err != nil {
+			return host.AuthDocument{}, err
+		}
+	}
+	return host.AuthDocument{AuthIndex: authIndex, Name: "credential", Path: c.path, JSON: raw}, nil
+}
+
+func (c *refreshingCallbacks) ListAuthFiles(context.Context) ([]host.AuthFile, error) {
+	return nil, nil
+}
+func (c *refreshingCallbacks) GetRuntime(context.Context, string) (host.RuntimeAuth, error) {
+	return host.RuntimeAuth{}, nil
+}
+func (c *refreshingCallbacks) SaveAuth(context.Context, string, json.RawMessage) error {
+	return errors.New("file-backed credentials must not go through host.auth.save")
+}
+func (c *refreshingCallbacks) HTTPDo(context.Context, host.HTTPRequest) (host.HTTPResponse, error) {
+	return host.HTTPResponse{}, nil
+}
+
+func TestHostTransition_TokenRefreshDuringApplyIsPreserved(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "idx-1.json")
+	if err := os.WriteFile(path, []byte(`{"access_token":"old","refresh_token":"r1","priority":10,"disabled":false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	callbacks := &refreshingCallbacks{path: path, refreshed: `{"access_token":"new","refresh_token":"r2","priority":10,"disabled":false}`}
+	result, err := apply.NewHostTransition(host.NewClient(callbacks)).Execute(context.Background(), apply.TransitionRound{Intents: []apply.TransitionIntent{{
+		AuthIndex: "idx-1",
+		Expected:  apply.CredentialState{AuthIndex: "idx-1", Priority: 10, PriorityPresent: true, Disabled: false, DisabledKnown: true},
+		Target:    apply.CredentialTarget{Priority: apply.SetPriority(90)},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Details[0].Outcome != apply.OutcomeCommitted {
+		t.Fatalf("expected committed after re-read, got %#v", result.Details[0])
+	}
+	var document map[string]any
+	data, _ := os.ReadFile(path)
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	if document["access_token"] != "new" || document["refresh_token"] != "r2" || document["priority"] != float64(90) {
+		t.Fatalf("refreshed tokens lost or priority missing: %s", data)
+	}
+}
+
+func TestHostTransition_ConcurrentPriorityChangeBecomesConflict(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "idx-1.json")
+	if err := os.WriteFile(path, []byte(`{"priority":10,"disabled":false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manual := `{"priority":55,"disabled":false}`
+	callbacks := &refreshingCallbacks{path: path, refreshed: manual}
+	result, err := apply.NewHostTransition(host.NewClient(callbacks)).Execute(context.Background(), apply.TransitionRound{Intents: []apply.TransitionIntent{{
+		AuthIndex: "idx-1",
+		Expected:  apply.CredentialState{AuthIndex: "idx-1", Priority: 10, PriorityPresent: true, Disabled: false, DisabledKnown: true},
+		Target:    apply.CredentialTarget{Priority: apply.SetPriority(90)},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Details[0].Outcome != apply.OutcomeConflict || result.Details[0].Reason != apply.ReasonPriorityConflict {
+		t.Fatalf("expected priority conflict, got %#v", result.Details[0])
+	}
+	if data, _ := os.ReadFile(path); string(data) != manual {
+		t.Fatalf("concurrent manual change was overwritten: %s", data)
+	}
+}
